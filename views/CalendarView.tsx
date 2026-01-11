@@ -14,17 +14,16 @@ interface CalendarViewProps {
     labels: any;
 }
 
-const ROW_HEIGHT_PX = 56; 
+const DEFAULT_ROW_HEIGHT = 56;
+const MIN_ROW_HEIGHT = 30;
+const MAX_ROW_HEIGHT = 150;
 const HEADER_HEIGHT_PX = 40;
-const TOTAL_GRID_HEIGHT = 24 * ROW_HEIGHT_PX;
 
 const getZoned = (ts: number, timezone: string) => DateUtils.getZonedParts(ts, timezone);
 
 const getEventColorClasses = (priority: Priority, isDone: boolean, hasTagColor: boolean) => {
     if (isDone) return 'bg-slate-200 dark:bg-slate-700 text-slate-500 border-slate-300 dark:border-slate-600';
-    
     if (hasTagColor) return 'text-white border-black/10 dark:border-white/10 shadow-sm';
-
     switch (priority) {
         case Priority.HIGH: return 'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-200 border-rose-200 dark:border-rose-800';
         case Priority.MEDIUM: return 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-200 border-amber-200 dark:border-amber-800';
@@ -33,19 +32,12 @@ const getEventColorClasses = (priority: Priority, isDone: boolean, hasTagColor: 
     }
 };
 
-const getEventsForDay = (
-    dayColumnDate: Date, 
-    tasks: TaskEntity[], 
-    habits: HabitEntity[], 
-    settings: CalendarSettings, 
-    tags: TagEntity[]
-) => {
+const getEventsForDay = (dayColumnDate: Date, tasks: TaskEntity[], habits: HabitEntity[], settings: CalendarSettings, tags: TagEntity[]) => {
     const targetYear = dayColumnDate.getFullYear();
     const targetMonth = dayColumnDate.getMonth();
     const targetDate = dayColumnDate.getDate();
     const dayTasks: TaskEntity[] = [];
     const timezone = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-
     tasks.forEach(t => {
         if (!settings.showCompleted && t.status === TaskStatus.DONE) return;
         if (!t.recurrence) {
@@ -65,12 +57,7 @@ const getEventsForDay = (
                 const virtualTime = new Date(dayColumnDate);
                 virtualTime.setHours(zOriginal.hour, zOriginal.minute, 0, 0);
                 const projectedStartTs = virtualTime.getTime();
-                dayTasks.push({ 
-                    ...t, 
-                    id: `${t.id}_recur_${projectedStartTs}`, 
-                    plannedAt: projectedStartTs, 
-                    status: TaskStatus.TODO 
-                });
+                dayTasks.push({ ...t, id: `${t.id}_recur_${projectedStartTs}`, plannedAt: projectedStartTs, status: TaskStatus.TODO });
             }
         }
     });
@@ -92,14 +79,17 @@ const TimeGrid: React.FC<{
     onSwipe: (direction: 'PREV' | 'NEXT') => void;
 }> = ({ date, mode, settings, now, tasks, habits, tags, onNavigate, onSlotClick, onTaskMove, onTaskResize, onSwipe }) => {
     
+    const [rowHeight, setRowHeight] = useState(DEFAULT_ROW_HEIGHT);
     const days = mode === 'DAY' ? [date] : DateUtils.getWeekDays(DateUtils.getStartOfWeek(date));
     const hours = Array.from({ length: 24 }, (_, i) => i);
     const containerRef = useRef<HTMLDivElement>(null);
     const [scrollTop, setScrollTop] = useState(0);
 
-    // Swipe state
+    // Gestures state
     const touchStartX = useRef<number | null>(null);
     const touchStartY = useRef<number | null>(null);
+    const initialPinchDist = useRef<number | null>(null);
+    const initialRowHeight = useRef<number>(DEFAULT_ROW_HEIGHT);
     const [swipeOffset, setSwipeOffset] = useState(0);
 
     const [activeInteraction, setActiveInteraction] = useState<{
@@ -119,19 +109,19 @@ const TimeGrid: React.FC<{
         if (containerRef.current) {
             const h = new Date().getHours();
             const targetH = Math.max(0, h - 2);
-            let scrollY = targetH * ROW_HEIGHT_PX;
+            let scrollY = targetH * rowHeight;
             if (settings.hideNonWorkingHours) {
                 if (targetH < settings.workingHoursStart) scrollY = 0;
-                else scrollY = (targetH - settings.workingHoursStart) * ROW_HEIGHT_PX;
+                else scrollY = (targetH - settings.workingHoursStart) * rowHeight;
             }
             containerRef.current.scrollTop = scrollY;
         }
-    }, [settings.hideNonWorkingHours, settings.workingHoursStart]);
+    }, [settings.hideNonWorkingHours, settings.workingHoursStart, rowHeight === DEFAULT_ROW_HEIGHT]);
 
     const timezone = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
     const nowZoned = getZoned(now, timezone);
     const totalMinutes = nowZoned.hour * 60 + nowZoned.minute + nowZoned.second / 60;
-    const pxPerMin = ROW_HEIGHT_PX / 60;
+    const pxPerMin = rowHeight / 60;
     
     let redLineY = totalMinutes * pxPerMin;
     if (settings.hideNonWorkingHours) {
@@ -139,12 +129,68 @@ const TimeGrid: React.FC<{
         const endMin = settings.workingHoursEnd * 60;
         if (totalMinutes < startMin) redLineY = 0;
         else if (totalMinutes > endMin) redLineY = (endMin - startMin) * pxPerMin; 
-        else redLineY = redLineY - (settings.workingHoursStart * ROW_HEIGHT_PX);
+        else redLineY = redLineY - (settings.workingHoursStart * rowHeight);
     }
     
     const currentTimeLabel = `${nowZoned.hour.toString().padStart(2,'0')}:${nowZoned.minute.toString().padStart(2,'0')}`;
-    const rowStyle = { height: `${ROW_HEIGHT_PX}px`, minHeight: `${ROW_HEIGHT_PX}px`, flexShrink: 0, boxSizing: 'border-box' as const };
-    const gridContainerStyle = { height: settings.hideNonWorkingHours ? 'auto' : `${TOTAL_GRID_HEIGHT}px` };
+    const rowStyle = { height: `${rowHeight}px`, minHeight: `${rowHeight}px`, flexShrink: 0, boxSizing: 'border-box' as const };
+    const gridContainerStyle = { height: settings.hideNonWorkingHours ? 'auto' : `${24 * rowHeight}px` };
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        if (activeInteraction) return;
+        if (e.touches.length === 2) {
+            // Pinch init
+            initialPinchDist.current = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            initialRowHeight.current = rowHeight;
+        } else {
+            // Swipe init
+            touchStartX.current = e.touches[0].clientX;
+            touchStartY.current = e.touches[0].clientY;
+        }
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (activeInteraction) return;
+
+        if (e.touches.length === 2 && initialPinchDist.current !== null) {
+            // Handle Zoom
+            const currentDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            const zoomFactor = currentDist / initialPinchDist.current;
+            const newHeight = Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, initialRowHeight.current * zoomFactor));
+            setRowHeight(newHeight);
+            if (e.cancelable) e.preventDefault();
+            return;
+        }
+
+        if (touchStartX.current !== null && touchStartY.current !== null) {
+            const deltaX = e.touches[0].clientX - touchStartX.current;
+            const deltaY = e.touches[0].clientY - touchStartY.current;
+
+            // Only hijack horizontal movement
+            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+                setSwipeOffset(deltaX);
+                if (e.cancelable) e.preventDefault();
+            }
+        }
+    };
+
+    const handleTouchEnd = () => {
+        if (touchStartX.current !== null) {
+            const threshold = 80;
+            if (swipeOffset > threshold) onSwipe('PREV');
+            else if (swipeOffset < -threshold) onSwipe('NEXT');
+            setSwipeOffset(0);
+        }
+        touchStartX.current = null;
+        touchStartY.current = null;
+        initialPinchDist.current = null;
+    };
 
     const onPointerDown = (e: React.PointerEvent, task: TaskEntity, type: 'MOVE' | 'RESIZE') => {
         e.stopPropagation();
@@ -161,43 +207,6 @@ const TimeGrid: React.FC<{
         });
     };
 
-    const handleTouchStart = (e: React.TouchEvent) => {
-        if (activeInteraction) return; // Don't swipe while moving task
-        touchStartX.current = e.touches[0].clientX;
-        touchStartY.current = e.touches[0].clientY;
-    };
-
-    const handleTouchMove = (e: React.TouchEvent) => {
-        if (touchStartX.current === null || touchStartY.current === null || activeInteraction) return;
-        
-        const deltaX = e.touches[0].clientX - touchStartX.current;
-        const deltaY = e.touches[0].clientY - touchStartY.current;
-
-        // If predominantly horizontal
-        if (Math.abs(deltaX) > Math.abs(deltaY)) {
-            setSwipeOffset(deltaX);
-            // Optional: prevent vertical scrolling if swiping horizontal
-            if (Math.abs(deltaX) > 10) {
-                if (e.cancelable) e.preventDefault();
-            }
-        }
-    };
-
-    const handleTouchEnd = () => {
-        if (touchStartX.current === null) return;
-        
-        const threshold = 100;
-        if (swipeOffset > threshold) {
-            onSwipe('PREV');
-        } else if (swipeOffset < -threshold) {
-            onSwipe('NEXT');
-        }
-        
-        setSwipeOffset(0);
-        touchStartX.current = null;
-        touchStartY.current = null;
-    };
-
     const onPointerMove = (e: React.PointerEvent) => {
         if (!activeInteraction) return;
         setActiveInteraction({ ...activeInteraction, currentX: e.clientX, currentY: e.clientY });
@@ -206,9 +215,8 @@ const TimeGrid: React.FC<{
     const onPointerUp = (e: React.PointerEvent) => {
         if (!activeInteraction) return;
         const { type, task, initialY, initialX, initialTime, initialDuration, currentY, currentX } = activeInteraction;
-        
         const deltaY = currentY - initialY;
-        const deltaMinutes = Math.round(deltaY / (ROW_HEIGHT_PX / 4)) * 15;
+        const deltaMinutes = Math.round(deltaY / (rowHeight / 4)) * 15;
 
         if (type === 'RESIZE') {
             const newDuration = Math.max(15, initialDuration + deltaMinutes);
@@ -220,16 +228,11 @@ const TimeGrid: React.FC<{
                 const dayWidth = dayCols[0]?.clientWidth || 100;
                 const deltaX = currentX - initialX;
                 const dayShift = Math.round(deltaX / dayWidth);
-                
                 const newTime = new Date(initialTime);
                 newTime.setDate(newTime.getDate() + dayShift);
                 newTime.setMinutes(newTime.getMinutes() + deltaMinutes);
-                
-                if (newTime.getTime() !== initialTime || dayShift !== 0) {
-                    onTaskMove(task, newTime.getTime());
-                } else if (Math.abs(deltaY) < 5 && Math.abs(deltaX) < 5) {
-                    onNavigate({ type: 'TASK_DETAIL', taskId: task.id.split('_')[0] });
-                }
+                if (newTime.getTime() !== initialTime || dayShift !== 0) onTaskMove(task, newTime.getTime());
+                else if (Math.abs(deltaY) < 5 && Math.abs(deltaX) < 5) onNavigate({ type: 'TASK_DETAIL', taskId: task.id.split('_')[0] });
             }
         }
         setActiveInteraction(null);
@@ -242,6 +245,7 @@ const TimeGrid: React.FC<{
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
         >
+            {/* Time Indicators Column */}
             <div className="w-12 flex-shrink-0 border-r border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col z-20 overflow-hidden relative">
                 <div style={{ height: `${HEADER_HEIGHT_PX}px` }} className="border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900"></div>
                 <div className="overflow-hidden" style={{marginTop: `-${scrollTop}px`}}>
@@ -255,13 +259,14 @@ const TimeGrid: React.FC<{
                 </div>
             </div>
             
+            {/* Days Grid */}
             <div 
                 ref={containerRef} 
                 onScroll={handleScroll} 
                 className="flex-1 overflow-auto bg-white dark:bg-slate-900 relative h-full transition-transform duration-75"
                 style={{ transform: swipeOffset ? `translateX(${swipeOffset * 0.2}px)` : 'none' }}
             >
-                <div className="flex min-w-[300px] relative h-full">
+                <div className="flex min-w-full relative h-full">
                     {days.map((day, dIdx) => {
                         const { tasks: dayTasks } = getEventsForDay(day, tasks, habits, settings, tags);
                         const isToday = DateUtils.isSameDay(day, new Date(now));
@@ -297,7 +302,7 @@ const TimeGrid: React.FC<{
                                         const isBeingInteracted = activeInteraction?.task.id === task.id;
                                         if (isBeingInteracted && activeInteraction) {
                                             const deltaY = activeInteraction.currentY - activeInteraction.initialY;
-                                            const deltaMinutes = Math.round(deltaY / (ROW_HEIGHT_PX / 4)) * 15;
+                                            const deltaMinutes = Math.round(deltaY / (rowHeight / 4)) * 15;
                                             if (activeInteraction.type === 'MOVE') {
                                                 const z = getZoned(activeInteraction.initialTime, timezone);
                                                 startHour = z.hour + (z.minute + deltaMinutes) / 60;
@@ -316,8 +321,8 @@ const TimeGrid: React.FC<{
                                             startHour = startHour - settings.workingHoursStart;
                                         }
 
-                                        const top = startHour * ROW_HEIGHT_PX;
-                                        const height = (duration / 60) * ROW_HEIGHT_PX;
+                                        const top = startHour * rowHeight;
+                                        const height = (duration / 60) * rowHeight;
                                         const isDone = task.status === TaskStatus.DONE;
                                         const isRecurring = task.id.includes('_recur_') || !!task.recurrence;
                                         
@@ -333,9 +338,7 @@ const TimeGrid: React.FC<{
                                             height: `${Math.max(20, height)}px`, 
                                             touchAction: 'none' 
                                         };
-                                        if (tagColor && !isDone) {
-                                            inlineStyle.backgroundColor = tagColor;
-                                        }
+                                        if (tagColor && !isDone) inlineStyle.backgroundColor = tagColor;
 
                                         return (
                                             <div key={task.id} onPointerDown={(e) => onPointerDown(e, task, 'MOVE')} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className={blockClass} style={inlineStyle}>
@@ -438,11 +441,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ userId, onNavigate, 
     const handleSwipe = (direction: 'PREV' | 'NEXT') => {
         const d = new Date(currentDate);
         const offset = settings.viewMode === 'WEEK' ? 7 : 1;
-        if (direction === 'PREV') {
-            d.setDate(d.getDate() - offset);
-        } else {
-            d.setDate(d.getDate() + offset);
-        }
+        if (direction === 'PREV') d.setDate(d.getDate() - offset);
+        else d.setDate(d.getDate() + offset);
         setCurrentDate(d);
     };
 
@@ -491,10 +491,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ userId, onNavigate, 
             await UseCases.createTask.execute(baseTask.userId, baseTask.title, baseTask.priority, baseTask.energyLevel, newDuration || baseTask.estimateMinutes, undefined, baseTask.tags, undefined, newStart || task.plannedAt, newDuration || baseTask.durationMinutes);
         } else if (mode === 'ALL') {
             const updates: any = { ...baseTask };
-            if (newDuration) {
-                updates.durationMinutes = newDuration;
-                updates.estimateMinutes = newDuration;
-            }
+            if (newDuration) { updates.durationMinutes = newDuration; updates.estimateMinutes = newDuration; }
             if (newStart) {
                 const newTimeDate = new Date(newStart);
                 const originalStartDate = new Date(baseTask.plannedAt || Date.now()); 
