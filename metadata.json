@@ -1,0 +1,7 @@
+{
+  "name": "Chronos - Productivity Coach",
+  "description": "A privacy-focused productivity coach offering task management, focus timers, and AI-driven insights. Designed as a functional prototype for the Chronos ecosystem.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

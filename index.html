@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Chronos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              glass: {
+                100: 'rgba(255, 255, 255, 0.1)',
+                200: 'rgba(255, 255, 255, 0.2)',
+                300: 'rgba(255, 255, 255, 0.3)',
+              }
+            },
+            boxShadow: {
+              'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+              'glass-dark': '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
+              'glow': '0 0 20px rgba(99, 102, 241, 0.3)',
+            },
+            animation: {
+              'spring-up': 'springUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards',
+              'spring-in': 'springIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards',
+              'fade-in': 'fadeIn 0.3s ease-out forwards',
+              'scale-press': 'scalePress 0.1s ease-out forwards',
+            },
+            keyframes: {
+              springUp: {
+                '0%': { transform: 'translateY(20px)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
+              },
+              springIn: {
+                '0%': { transform: 'scale(0.95)', opacity: '0' },
+                '100%': { transform: 'scale(1)', opacity: '1' },
+              },
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              scalePress: {
+                '0%': { transform: 'scale(1)' },
+                '100%': { transform: 'scale(0.96)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #F8F9FA;
+        color: #1E293B;
+        margin: 0;
+      }
+      .dark body {
+        background-color: #0F1115;
+        color: #F1F5F9;
+      }
+      .glass-panel {
+        background: rgba(255, 255, 255, 0.65);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+      }
+      .dark .glass-panel {
+        background: rgba(17, 24, 39, 0.65);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .ambient-bg {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: -1;
+        pointer-events: none;
+      }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.1",
+    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.1/client",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+  }
+}
+</script>
+  </head>
+  <body class="transition-colors duration-200 antialiased">
+    <div class="ambient-bg"></div>
+    <div id="root"></div>
+    <!-- Явное подключение точки входа -->
+    <script type="module" src="./index.tsx"></script>
+  </body>
+</html>
