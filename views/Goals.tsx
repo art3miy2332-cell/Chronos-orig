@@ -5,6 +5,7 @@ import { Plan } from '../domain/models';
 import { useGoalDetailViewModel } from '../hooks/viewmodels';
 import { GoalRepository, TaskRepository } from '../data/repositories';
 import { UseCases } from '../domain/usecases';
+import { TaskMapper } from '../data/mappers';
 import { 
     Plus, Minus, Target, ArrowRight, Calendar, BarChart3, Activity, 
     CheckCircle2, Circle, AlertTriangle, ArrowLeft, Edit2, 
@@ -352,7 +353,8 @@ const GoalBlueprint: React.FC<{
         // Unlink stageId from tasks
         const stageTasks = tasks.filter(t => t.stageId === stageId);
         for (const task of stageTasks) {
-             await UseCases.updateTask.execute({ ...task, stageId: undefined });
+            // FIX: Use TaskMapper.toDomain to match the required Task type for execute
+             await UseCases.updateTask.execute(TaskMapper.toDomain({ ...task, stageId: undefined }));
         }
 
         const updatedRoadmap = goal.roadmap.filter(r => r.id !== stageId);

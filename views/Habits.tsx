@@ -1,9 +1,8 @@
 
-
 import React from 'react';
 import { useHabitsViewModel } from '../hooks/viewmodels';
 import { Plus, Flame, CheckCircle2, Circle, Settings, Activity, Trash2 } from 'lucide-react';
-import { Habit } from '../domain/models';
+import { HabitEntity } from '../types';
 
 interface HabitsProps {
     userId: string;
@@ -14,7 +13,8 @@ interface HabitsProps {
 export const Habits: React.FC<HabitsProps> = ({ userId, onNavigate, labels }) => {
     const { habits, loading, markDone, deleteHabit } = useHabitsViewModel(userId);
 
-    const isDoneToday = (habit: Habit) => {
+    // FIX: Change parameter type to HabitEntity to match the data from useHabitsViewModel
+    const isDoneToday = (habit: HabitEntity) => {
         if (!habit.lastDoneAt) return false;
         const today = new Date().setHours(0,0,0,0);
         const last = new Date(habit.lastDoneAt).setHours(0,0,0,0);

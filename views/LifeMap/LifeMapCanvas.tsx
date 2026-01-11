@@ -306,7 +306,7 @@ const NodeInspector: React.FC<{
                             <input value={label} onChange={e => setLabel(e.target.value)} className="w-full p-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base dark:text-white outline-none focus:border-indigo-500 transition-colors" />
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">{node.type === MapNodeType.LIMITATION ? "Как это мешает достижению цели?" : "Описание / Мысли"}</label>
+                            <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">{node.type === MapNodeType.LIMITATION ? "Как это мешает достижению цели?" : "Описание / Мылы"}</label>
                             <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder={node.type === MapNodeType.LIMITATION ? "Опишите почему это является препятствием..." : "Добавьте детали..."} className="w-full p-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base dark:text-white outline-none focus:border-indigo-500 transition-colors resize-none h-24" />
                         </div>
                     </div>
@@ -396,6 +396,10 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     const [unmappedGoals, setUnmappedGoals] = useState<GoalEntity[]>([]);
     const [unmappedTasks, setUnmappedTasks] = useState<TaskEntity[]>([]);
     const containerRef = useRef<HTMLDivElement>(null);
+
+    // Refs for pinch-to-zoom
+    const initialPinchDist = useRef<number | null>(null);
+    const initialPinchViewport = useRef<any>(null);
 
     const futureSelfNode = nodes.find(n => n.type === MapNodeType.FUTURE_SELF);
     const globalProgress = futureSelfNode?.progressData?.value || 0;
@@ -512,12 +516,68 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         } else { setViewport(prev => ({ ...prev, x: prev.x - e.deltaX, y: prev.y - e.deltaY })); }
     };
 
+    // TOUCH HANDLERS FOR PINCH-TO-ZOOM
+    const handleTouchStart = (e: React.TouchEvent) => {
+        if (e.touches.length === 2) {
+            const d = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            initialPinchDist.current = d;
+            initialPinchViewport.current = { ...viewport };
+        }
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (e.touches.length === 2 && initialPinchDist.current !== null && initialPinchViewport.current !== null) {
+            if (e.cancelable) e.preventDefault();
+            
+            const currentDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            
+            const pinchRatio = currentDist / initialPinchDist.current;
+            const newZoom = Math.min(Math.max(ZOOM_MIN, initialPinchViewport.current.zoom * pinchRatio), ZOOM_MAX);
+            
+            // Calculate midpoint of the pinch in screen coordinates
+            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            
+            // Get container offset
+            if (containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                const screenPinchX = midX - rect.left;
+                const screenPinchY = midY - rect.top;
+                
+                // Keep world coordinate under pinch fixed:
+                // worldX = (screenX - viewportX) / zoom
+                // newViewportX = screenX - worldX * newZoom
+                const worldX = (screenPinchX - initialPinchViewport.current.x) / initialPinchViewport.current.zoom;
+                const worldY = (screenPinchY - initialPinchViewport.current.y) / initialPinchViewport.current.zoom;
+                
+                setViewport({
+                    zoom: newZoom,
+                    x: screenPinchX - worldX * newZoom,
+                    y: screenPinchY - worldY * newZoom
+                });
+            }
+        }
+    };
+
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        if (e.touches.length < 2) {
+            initialPinchDist.current = null;
+            initialPinchViewport.current = null;
+        }
+    };
+
     const handleCanvasPointerDown = (e: React.PointerEvent) => {
         if (edgeDraftMenu) setEdgeDraftMenu(null);
         if (e.button !== 0) return; 
         setSelectedNodeIds(new Set()); 
         setSelectedEdgeId(null); 
-        setActiveInspectorNodeId(null); // Close inspector on canvas click
+        setActiveInspectorNodeId(null); 
         setInteractionMode('PANNING'); 
         setDragStartPos({ x: e.clientX, y: e.clientY }); 
         setEditingNodeId(null); 
@@ -600,7 +660,6 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     };
 
     const handlePointerUp = (e: React.PointerEvent) => {
-        // Calculate movement distance to check if it was a simple click
         const dist = Math.sqrt(Math.pow(e.clientX - dragStartPos.x, 2) + Math.pow(e.clientY - dragStartPos.y, 2));
         const isClick = dist < CLICK_THRESHOLD;
 
@@ -609,7 +668,6 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                 pushToHistory(nodes, edges, 'MOVE_NODE');
                 saveToDb(nodes, edges);
             } else {
-                // If it was a click, show inspector for the single selected node
                 if (selectedNodeIds.size === 1) {
                     setActiveInspectorNodeId(Array.from(selectedNodeIds)[0]);
                 }
@@ -648,7 +706,8 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         if (!edgeDraftMenu) return;
         const newEdge: MapEdgeEntity = { id: uuid(), mapId: mapId!, sourceNodeId: edgeDraftMenu.sourceId, targetNodeId: edgeDraftMenu.targetId, relationType: type, meta: createMeta() };
         const newEdges = [...edges, newEdge];
-        setEdges(newEdges); pushToHistory(nodes, newEdges, 'CONNECT'); saveToDb(newEdges, newEdges); setEdgeDraftMenu(null);
+        // Fix: Corrected the first argument of saveToDb from newEdges to nodes
+        setEdges(newEdges); pushToHistory(nodes, newEdges, 'CONNECT'); saveToDb(nodes, newEdges); setEdgeDraftMenu(null);
     };
 
     const handleEdgeClick = (e: React.MouseEvent, edgeId: string) => { 
@@ -784,7 +843,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                 </div>
             </div>
 
-            {/* Controls Toolbar - Shifted down on mobile to avoid progress bar overlap */}
+            {/* Controls Toolbar */}
             <div className="absolute top-20 md:top-4 left-4 z-20 flex flex-col gap-2">
                 <div className="bg-white dark:bg-slate-900 p-1.5 md:p-2 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col gap-1.5 md:gap-2">
                     <button onClick={() => { if (containerRef.current) { const w = containerRef.current.clientWidth, h = containerRef.current.clientHeight; const center = screenToWorld(w/2, h/2, viewport); const newNode: MapNodeEntity = { id: uuid(), mapId: mapId!, type: MapNodeType.NOTE, position: center, content: { label: "Заметка" }, references: {}, meta: createMeta() }; const newNodes = [...nodes, newNode]; setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE'); saveToDb(newNodes, edges); } }} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Add Note"><Brain size={18} className="md:w-5 md:h-5" /></button>
@@ -803,7 +862,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                 </div>
             )}
 
-            {/* Analysis Button - Shifted down on mobile */}
+            {/* Analysis Button */}
             <button 
                 onClick={() => setShowAnalysis(!showAnalysis)} 
                 className={`absolute top-20 md:top-4 right-4 z-30 flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 rounded-xl shadow-lg border transition-all ${analysisResult && analysisResult.issues.length > 0 ? 'bg-amber-100 border-amber-300 text-amber-700 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500'}`}
@@ -834,7 +893,20 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                 <button onClick={() => setViewport(v => ({...v, zoom: Math.min(ZOOM_MAX, v.zoom + 0.1)}))} className="p-1.5 md:p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><Plus size={14} className="md:w-4 md:h-4" /></button>
             </div>
 
-            <div ref={containerRef} className="w-full h-full cursor-default relative touch-none" onPointerDown={handleCanvasPointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onWheel={handleWheel} onDoubleClick={handleCanvasDoubleClick} onContextMenu={(e) => e.preventDefault()}>
+            <div 
+                ref={containerRef} 
+                className="w-full h-full cursor-default relative touch-none" 
+                onPointerDown={handleCanvasPointerDown} 
+                onPointerMove={handlePointerMove} 
+                onPointerUp={handlePointerUp} 
+                onPointerLeave={handlePointerUp} 
+                onWheel={handleWheel} 
+                onDoubleClick={handleCanvasDoubleClick} 
+                onContextMenu={(e) => e.preventDefault()}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+            >
                 <div style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`, transformOrigin: '0 0', width: '100%', height: '100%' }}>
                     <div id="canvas-bg" className="absolute -top-[10000px] -left-[10000px] w-[20000px] h-[20000px] pointer-events-auto" style={{ backgroundImage: 'radial-gradient(circle, #cbd5e1 1px, transparent 1px)', backgroundSize: '40px 40px', opacity: 0.4 }} />
                     <svg className="absolute -top-[10000px] -left-[10000px] w-[20000px] h-[20000px] pointer-events-none overflow-visible" viewBox="-10000 -10000 20000 20000">

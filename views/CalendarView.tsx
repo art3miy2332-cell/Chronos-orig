@@ -14,10 +14,10 @@ interface CalendarViewProps {
     labels: any;
 }
 
-const DEFAULT_ROW_HEIGHT = 56;
-const MIN_ROW_HEIGHT = 30;
-const MAX_ROW_HEIGHT = 150;
-const HEADER_HEIGHT_PX = 40;
+const DEFAULT_ROW_HEIGHT = 64;
+const MIN_ROW_HEIGHT = 36;
+const MAX_ROW_HEIGHT = 180;
+const HEADER_HEIGHT_PX = 48;
 
 const getZoned = (ts: number, timezone: string) => DateUtils.getZonedParts(ts, timezone);
 
@@ -38,6 +38,7 @@ const getEventsForDay = (dayColumnDate: Date, tasks: TaskEntity[], habits: Habit
     const targetDate = dayColumnDate.getDate();
     const dayTasks: TaskEntity[] = [];
     const timezone = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
     tasks.forEach(t => {
         if (!settings.showCompleted && t.status === TaskStatus.DONE) return;
         if (!t.recurrence) {
@@ -57,7 +58,12 @@ const getEventsForDay = (dayColumnDate: Date, tasks: TaskEntity[], habits: Habit
                 const virtualTime = new Date(dayColumnDate);
                 virtualTime.setHours(zOriginal.hour, zOriginal.minute, 0, 0);
                 const projectedStartTs = virtualTime.getTime();
-                dayTasks.push({ ...t, id: `${t.id}_recur_${projectedStartTs}`, plannedAt: projectedStartTs, status: TaskStatus.TODO });
+                dayTasks.push({ 
+                    ...t, 
+                    id: `${t.id}_recur_${projectedStartTs}`, 
+                    plannedAt: projectedStartTs, 
+                    status: TaskStatus.TODO 
+                });
             }
         }
     });
@@ -85,11 +91,12 @@ const TimeGrid: React.FC<{
     const containerRef = useRef<HTMLDivElement>(null);
     const [scrollTop, setScrollTop] = useState(0);
 
-    // Gestures state
+    // Gesture State
     const touchStartX = useRef<number | null>(null);
     const touchStartY = useRef<number | null>(null);
     const initialPinchDist = useRef<number | null>(null);
     const initialRowHeight = useRef<number>(DEFAULT_ROW_HEIGHT);
+    const isPinching = useRef(false);
     const [swipeOffset, setSwipeOffset] = useState(0);
 
     const [activeInteraction, setActiveInteraction] = useState<{
@@ -103,10 +110,13 @@ const TimeGrid: React.FC<{
         currentX: number;
     } | null>(null);
 
-    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => setScrollTop(e.currentTarget.scrollTop);
+    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+        setScrollTop(e.currentTarget.scrollTop);
+    };
 
+    // Auto-scroll to morning on load
     useEffect(() => {
-        if (containerRef.current) {
+        if (containerRef.current && rowHeight === DEFAULT_ROW_HEIGHT) {
             const h = new Date().getHours();
             const targetH = Math.max(0, h - 2);
             let scrollY = targetH * rowHeight;
@@ -116,7 +126,7 @@ const TimeGrid: React.FC<{
             }
             containerRef.current.scrollTop = scrollY;
         }
-    }, [settings.hideNonWorkingHours, settings.workingHoursStart, rowHeight === DEFAULT_ROW_HEIGHT]);
+    }, []);
 
     const timezone = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
     const nowZoned = getZoned(now, timezone);
@@ -134,19 +144,31 @@ const TimeGrid: React.FC<{
     
     const currentTimeLabel = `${nowZoned.hour.toString().padStart(2,'0')}:${nowZoned.minute.toString().padStart(2,'0')}`;
     const rowStyle = { height: `${rowHeight}px`, minHeight: `${rowHeight}px`, flexShrink: 0, boxSizing: 'border-box' as const };
-    const gridContainerStyle = { height: settings.hideNonWorkingHours ? 'auto' : `${24 * rowHeight}px` };
+    
+    const visibleHoursCount = settings.hideNonWorkingHours 
+        ? Math.max(1, settings.workingHoursEnd - settings.workingHoursStart + 1)
+        : 24;
+    const totalGridHeight = visibleHoursCount * rowHeight;
 
+    const gridContainerStyle = { 
+        height: `${totalGridHeight}px`,
+        minHeight: `${totalGridHeight}px`,
+        minWidth: '100%'
+    };
+
+    // GESTURE HANDLERS
     const handleTouchStart = (e: React.TouchEvent) => {
         if (activeInteraction) return;
+        
         if (e.touches.length === 2) {
-            // Pinch init
+            isPinching.current = true;
             initialPinchDist.current = Math.hypot(
                 e.touches[0].clientX - e.touches[1].clientX,
                 e.touches[0].clientY - e.touches[1].clientY
             );
             initialRowHeight.current = rowHeight;
-        } else {
-            // Swipe init
+        } else if (e.touches.length === 1) {
+            isPinching.current = false;
             touchStartX.current = e.touches[0].clientX;
             touchStartY.current = e.touches[0].clientY;
         }
@@ -156,46 +178,48 @@ const TimeGrid: React.FC<{
         if (activeInteraction) return;
 
         if (e.touches.length === 2 && initialPinchDist.current !== null) {
-            // Handle Zoom
             const currentDist = Math.hypot(
                 e.touches[0].clientX - e.touches[1].clientX,
                 e.touches[0].clientY - e.touches[1].clientY
             );
-            const zoomFactor = currentDist / initialPinchDist.current;
-            const newHeight = Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, initialRowHeight.current * zoomFactor));
+            const factor = currentDist / initialPinchDist.current;
+            const newHeight = Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, initialRowHeight.current * factor));
             setRowHeight(newHeight);
             if (e.cancelable) e.preventDefault();
             return;
         }
 
-        if (touchStartX.current !== null && touchStartY.current !== null) {
+        if (!isPinching.current && touchStartX.current !== null && touchStartY.current !== null && e.touches.length === 1) {
             const deltaX = e.touches[0].clientX - touchStartX.current;
             const deltaY = e.touches[0].clientY - touchStartY.current;
 
-            // Only hijack horizontal movement
-            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+            if (Math.abs(deltaY) > Math.abs(deltaX)) {
+                return;
+            }
+
+            if (Math.abs(deltaX) > 15) {
                 setSwipeOffset(deltaX);
-                if (e.cancelable) e.preventDefault();
+                if (e.cancelable) e.preventDefault(); 
             }
         }
     };
 
     const handleTouchEnd = () => {
-        if (touchStartX.current !== null) {
-            const threshold = 80;
+        if (touchStartX.current !== null && !isPinching.current) {
+            const threshold = 100;
             if (swipeOffset > threshold) onSwipe('PREV');
             else if (swipeOffset < -threshold) onSwipe('NEXT');
-            setSwipeOffset(0);
         }
+        setSwipeOffset(0);
         touchStartX.current = null;
         touchStartY.current = null;
         initialPinchDist.current = null;
+        isPinching.current = false;
     };
 
     const onPointerDown = (e: React.PointerEvent, task: TaskEntity, type: 'MOVE' | 'RESIZE') => {
         e.stopPropagation();
-        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-        setActiveInteraction({
+        const interaction = {
             type,
             task,
             initialX: e.clientX,
@@ -204,11 +228,26 @@ const TimeGrid: React.FC<{
             initialDuration: task.durationMinutes || task.estimateMinutes || 60,
             currentY: e.clientY,
             currentX: e.clientX
-        });
+        };
+
+        if (e.pointerType === 'mouse') {
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+            setActiveInteraction(interaction);
+        } else {
+            setActiveInteraction(interaction);
+        }
     };
 
     const onPointerMove = (e: React.PointerEvent) => {
         if (!activeInteraction) return;
+        if (e.pointerType !== 'mouse' && !containerRef.current?.hasPointerCapture?.(e.pointerId)) {
+            const dist = Math.sqrt(Math.pow(e.clientX - activeInteraction.initialX, 2) + Math.pow(e.clientY - activeInteraction.initialY, 2));
+            if (dist > 10) {
+                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+            } else {
+                return; 
+            }
+        }
         setActiveInteraction({ ...activeInteraction, currentX: e.clientX, currentY: e.clientY });
     };
 
@@ -216,26 +255,35 @@ const TimeGrid: React.FC<{
         if (!activeInteraction) return;
         const { type, task, initialY, initialX, initialTime, initialDuration, currentY, currentX } = activeInteraction;
         const deltaY = currentY - initialY;
-        const deltaMinutes = Math.round(deltaY / (rowHeight / 4)) * 15;
-
-        if (type === 'RESIZE') {
-            const newDuration = Math.max(15, initialDuration + deltaMinutes);
-            if (newDuration !== initialDuration) onTaskResize(task, newDuration);
-        } else {
-            const gridEl = containerRef.current;
-            if (gridEl) {
-                const dayCols = gridEl.querySelectorAll('.day-column');
-                const dayWidth = dayCols[0]?.clientWidth || 100;
-                const deltaX = currentX - initialX;
-                const dayShift = Math.round(deltaX / dayWidth);
-                const newTime = new Date(initialTime);
-                newTime.setDate(newTime.getDate() + dayShift);
-                newTime.setMinutes(newTime.getMinutes() + deltaMinutes);
-                if (newTime.getTime() !== initialTime || dayShift !== 0) onTaskMove(task, newTime.getTime());
-                else if (Math.abs(deltaY) < 5 && Math.abs(deltaX) < 5) onNavigate({ type: 'TASK_DETAIL', taskId: task.id.split('_')[0] });
+        const deltaX = currentX - initialX;
+        const dist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        
+        if (dist < 5) {
+            onNavigate({ type: 'TASK_DETAIL', taskId: task.id.split('_')[0] });
+        } else if (containerRef.current?.hasPointerCapture?.(e.pointerId) || e.pointerType === 'mouse') {
+            const deltaMinutes = Math.round(deltaY / (rowHeight / 4)) * 15;
+            if (type === 'RESIZE') {
+                const newDuration = Math.max(15, initialDuration + deltaMinutes);
+                if (newDuration !== initialDuration) onTaskResize(task, newDuration);
+            } else {
+                const gridEl = containerRef.current;
+                if (gridEl) {
+                    const dayCols = gridEl.querySelectorAll('.day-column');
+                    const dayWidth = dayCols[0]?.clientWidth || 100;
+                    const dayShift = Math.round(deltaX / dayWidth);
+                    const newTime = new Date(initialTime);
+                    newTime.setDate(newTime.getDate() + dayShift);
+                    newTime.setMinutes(newTime.getMinutes() + deltaMinutes);
+                    if (newTime.getTime() !== initialTime || dayShift !== 0) {
+                        onTaskMove(task, newTime.getTime());
+                    }
+                }
             }
         }
         setActiveInteraction(null);
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+        }
     };
 
     return (
@@ -245,47 +293,56 @@ const TimeGrid: React.FC<{
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
         >
-            {/* Time Indicators Column */}
-            <div className="w-12 flex-shrink-0 border-r border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col z-20 overflow-hidden relative">
+            {/* Time labels column */}
+            <div className="w-10 sm:w-12 flex-shrink-0 border-r border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col z-20 overflow-hidden relative">
                 <div style={{ height: `${HEADER_HEIGHT_PX}px` }} className="border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900"></div>
-                <div className="overflow-hidden" style={{marginTop: `-${scrollTop}px`}}>
-                    <div style={gridContainerStyle}>
-                        {hours.map(h => {
-                            const isNonWorking = h < settings.workingHoursStart || h > settings.workingHoursEnd;
-                            if (settings.hideNonWorkingHours && isNonWorking) return null;
-                            return <div key={h} style={rowStyle} className="relative border-transparent"><span className="absolute -top-2 right-2 text-[10px] text-slate-400 font-medium leading-4">{h}:00</span></div>;
-                        })}
+                <div className="overflow-hidden flex-1" style={{ position: 'relative' }}>
+                    <div style={{ transform: `translateY(-${scrollTop}px)`, position: 'absolute', top: 0, left: 0, right: 0 }}>
+                        <div style={gridContainerStyle}>
+                            {hours.map(h => {
+                                const isNonWorking = h < settings.workingHoursStart || h > settings.workingHoursEnd;
+                                if (settings.hideNonWorkingHours && isNonWorking) return null;
+                                return (
+                                    <div key={h} style={rowStyle} className="relative border-transparent">
+                                        <span className="absolute -top-2 right-2 text-[9px] sm:text-[10px] text-slate-400 font-medium leading-4">{h}:00</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             </div>
             
-            {/* Days Grid */}
+            {/* Scrollable grid area */}
             <div 
                 ref={containerRef} 
                 onScroll={handleScroll} 
-                className="flex-1 overflow-auto bg-white dark:bg-slate-900 relative h-full transition-transform duration-75"
-                style={{ transform: swipeOffset ? `translateX(${swipeOffset * 0.2}px)` : 'none' }}
+                className="flex-1 overflow-y-auto overflow-x-hidden bg-white dark:bg-slate-900 relative h-full transition-transform duration-75 ease-out touch-pan-y overscroll-behavior-y-contain no-scrollbar sm:scrollbar-default"
+                style={{ transform: swipeOffset ? `translateX(${swipeOffset * 0.3}px)` : 'none' }}
             >
-                <div className="flex min-w-full relative h-full">
+                <div className="flex min-w-full relative" style={{ minHeight: '100%' }}>
                     {days.map((day, dIdx) => {
                         const { tasks: dayTasks } = getEventsForDay(day, tasks, habits, settings, tags);
                         const isToday = DateUtils.isSameDay(day, new Date(now));
 
                         return (
-                            <div key={dIdx} className="day-column flex-1 min-w-[100px] border-r border-slate-100 dark:border-slate-800 relative group">
+                            <div key={dIdx} className={`day-column flex-1 border-r border-slate-100 dark:border-slate-800 relative group ${mode === 'WEEK' ? 'min-w-[42px] sm:min-w-[100px]' : 'min-w-full'}`}>
+                                {/* Header (Sticky) */}
                                 <div style={{ height: `${HEADER_HEIGHT_PX}px` }} className={`sticky top-0 border-b border-slate-100 dark:border-slate-800 flex items-center justify-center z-30 ${isToday ? 'bg-indigo-50 dark:bg-indigo-900/20' : 'bg-white dark:bg-slate-900'}`}>
                                     <div className="text-center">
-                                        <div className="text-[10px] uppercase text-slate-500 font-bold">{day.toLocaleDateString([], { weekday: 'short' })}</div>
-                                        <div className={`text-sm font-bold ${isToday ? 'text-indigo-600 bg-indigo-100 dark:bg-indigo-900/40 w-6 h-6 rounded-full flex items-center justify-center mx-auto' : 'text-slate-900 dark:text-white'}`}>{day.getDate()}</div>
+                                        <div className="text-[8px] sm:text-[10px] uppercase text-slate-500 font-bold">
+                                            <span className="sm:inline hidden">{day.toLocaleDateString([], { weekday: 'short' })}</span>
+                                            <span className="sm:hidden inline">{day.toLocaleDateString([], { weekday: 'narrow' })}</span>
+                                        </div>
+                                        <div className={`text-xs sm:text-sm font-bold ${isToday ? 'text-indigo-600 bg-indigo-100 dark:bg-indigo-900/40 w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center mx-auto' : 'text-slate-900 dark:text-white'}`}>{day.getDate()}</div>
                                     </div>
                                 </div>
 
                                 <div style={gridContainerStyle} className="relative">
                                     {isToday && (
                                         <div className="absolute left-0 right-0 z-40 pointer-events-none flex items-center transition-[top] duration-1000 ease-linear" style={{ top: `${redLineY}px`, transform: 'translateY(-1px)' }}>
-                                            <div className="w-full border-t-2 border-rose-500 shadow-sm relative flex items-center">
-                                                <div className="w-2 h-2 bg-rose-500 rounded-full absolute -left-1"></div>
-                                                <div className="absolute left-2 text-[9px] font-bold text-white bg-rose-500 px-1 rounded-sm -top-2 shadow-sm">{currentTimeLabel}</div>
+                                            <div className="w-full border-t border-rose-500 shadow-sm relative flex items-center">
+                                                <div className="w-1.5 h-1.5 bg-rose-500 rounded-full absolute -left-0.5"></div>
                                             </div>
                                         </div>
                                     )}
@@ -293,7 +350,14 @@ const TimeGrid: React.FC<{
                                     {hours.map(h => {
                                         const isNonWorking = h < settings.workingHoursStart || h > settings.workingHoursEnd;
                                         if (settings.hideNonWorkingHours && isNonWorking) return null;
-                                        return <div key={h} style={rowStyle} className={`border-b border-slate-50 dark:border-slate-800/50 relative cursor-pointer active:bg-slate-50 dark:active:bg-slate-800/50 ${isNonWorking ? 'bg-slate-50/50 dark:bg-slate-800/30' : ''}`} onClick={() => onSlotClick(new Date(day).setHours(h, 0, 0, 0))} />;
+                                        return (
+                                            <div 
+                                                key={h} 
+                                                style={rowStyle} 
+                                                className={`border-b border-slate-50 dark:border-slate-800/50 relative cursor-pointer active:bg-slate-50 dark:active:bg-slate-800/50 ${isNonWorking ? 'bg-slate-50/50 dark:bg-slate-800/30' : ''}`} 
+                                                onClick={() => onSlotClick(new Date(day).setHours(h, 0, 0, 0))} 
+                                            />
+                                        );
                                     })}
 
                                     {dayTasks.map(task => {
@@ -325,26 +389,21 @@ const TimeGrid: React.FC<{
                                         const height = (duration / 60) * rowHeight;
                                         const isDone = task.status === TaskStatus.DONE;
                                         const isRecurring = task.id.includes('_recur_') || !!task.recurrence;
-                                        
                                         const taskTag = task.tags && task.tags.length > 0 ? task.tags[0] : null;
                                         const tagEntity = taskTag ? tags.find(t => t.name === taskTag) : null;
                                         const tagColor = tagEntity?.colorHex;
 
-                                        let blockClass = `absolute left-1 right-1 rounded p-1 text-[10px] font-medium overflow-hidden border cursor-grab active:cursor-grabbing z-10 hover:z-20 shadow-sm transition-shadow ${isBeingInteracted ? 'shadow-xl scale-[1.02] opacity-90 z-50 ring-2 ring-indigo-500' : ''} `;
+                                        let blockClass = `absolute left-0.5 right-0.5 rounded sm:p-1 p-0.5 text-[8px] sm:text-[10px] font-medium overflow-hidden border cursor-grab active:cursor-grabbing z-10 hover:z-20 shadow-sm transition-shadow ${isBeingInteracted ? 'shadow-xl scale-[1.02] opacity-90 z-50 ring-2 ring-indigo-50 cursor-grabbing' : ''} `;
                                         blockClass += getEventColorClasses(task.priority, isDone, !!tagColor);
                                         
-                                        const inlineStyle: React.CSSProperties = { 
-                                            top: `${top}px`, 
-                                            height: `${Math.max(20, height)}px`, 
-                                            touchAction: 'none' 
-                                        };
+                                        const inlineStyle: React.CSSProperties = { top: `${top}px`, height: `${Math.max(18, height)}px`, touchAction: 'pan-y' };
                                         if (tagColor && !isDone) inlineStyle.backgroundColor = tagColor;
 
                                         return (
                                             <div key={task.id} onPointerDown={(e) => onPointerDown(e, task, 'MOVE')} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className={blockClass} style={inlineStyle}>
-                                                <div className="truncate font-bold flex items-center gap-1">{isRecurring && <Repeat size={8} />}{task.title}</div>
-                                                <div className="truncate opacity-80 flex items-center gap-1">{duration}m {isDone && <Check size={8} />}</div>
-                                                {!isDone && ( <div className="absolute bottom-0 left-0 right-0 h-4 cursor-ns-resize flex items-center justify-center group/resize" onPointerDown={(e) => onPointerDown(e, task, 'RESIZE')}> <div className="w-8 h-1 bg-black/10 rounded-full group-hover/resize:bg-black/30" /> </div> )}
+                                                <div className="truncate font-bold leading-tight">{isRecurring && <Repeat size={7} className="inline mr-0.5" />}{task.title}</div>
+                                                <div className="truncate opacity-80 sm:block hidden">{duration}m {isDone && <Check size={8} />}</div>
+                                                {!isDone && ( <div className="absolute bottom-0 left-0 right-0 h-2 sm:h-3 cursor-ns-resize flex items-center justify-center group/resize" onPointerDown={(e) => onPointerDown(e, task, 'RESIZE')}> <div className="w-4 sm:w-6 h-0.5 sm:h-1 bg-black/10 rounded-full group-hover/resize:bg-black/30" /> </div> )}
                                             </div>
                                         );
                                     })}
@@ -520,9 +579,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ userId, onNavigate, 
                 </div>
             </div>
             
-            <div className="flex-1 relative">
+            <div className="flex-1 relative overflow-hidden">
                 {settings.viewMode === 'MONTH' ? (
-                    <MonthView date={currentDate} tasks={tasks} habits={habits} tags={tags} settings={settings} onDateClick={(day) => { setCurrentDate(day); setSettings({...settings, viewMode: 'DAY'}); }} />
+                    <div className="h-full overflow-y-auto">
+                         <MonthView date={currentDate} tasks={tasks} habits={habits} tags={tags} settings={settings} onDateClick={(day) => { setCurrentDate(day); setSettings({...settings, viewMode: 'DAY'}); }} />
+                    </div>
                 ) : (
                     <TimeGrid 
                         date={currentDate} 

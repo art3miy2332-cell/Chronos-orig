@@ -29,6 +29,8 @@ const FocusModuleCard: React.FC<{
     
     const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
+    const tasks = module.tasks || [];
+
     const addTask = () => {
         const newTask: PlanTask = {
             id: crypto.randomUUID(),
@@ -39,26 +41,26 @@ const FocusModuleCard: React.FC<{
             estimateMinutes: 30,
             tags: []
         };
-        onUpdate({ ...module, tasks: [...module.tasks, newTask] });
+        onUpdate({ ...module, tasks: [...tasks, newTask] });
         setExpandedTaskId(newTask.id); // Auto-expand new task
     };
 
     const updateTask = (taskId: string, updates: Partial<PlanTask>) => {
         onUpdate({
             ...module,
-            tasks: module.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t)
+            tasks: tasks.map(t => t.id === taskId ? { ...t, ...updates } : t)
         });
     };
 
     const removeTask = (taskId: string) => {
         onUpdate({
             ...module,
-            tasks: module.tasks.filter(t => t.id !== taskId)
+            tasks: tasks.filter(t => t.id !== taskId)
         });
     };
 
     const toggleTaskTags = (taskId: string, tag: string) => {
-        const task = module.tasks.find(t => t.id === taskId);
+        const task = tasks.find(t => t.id === taskId);
         if (!task) return;
         
         const tags = task.tags || [];
@@ -123,10 +125,10 @@ const FocusModuleCard: React.FC<{
             {/* Tasks */}
             {!module.isCollapsed && (
                 <div className="p-3 space-y-2">
-                    {module.tasks.length === 0 && (
+                    {tasks.length === 0 && (
                         <div className="text-xs text-slate-400 italic py-2 text-center">Нет задач в этом блоке</div>
                     )}
-                    {module.tasks.map(task => {
+                    {tasks.map(task => {
                         const isExpanded = expandedTaskId === task.id;
                         return (
                             <div key={task.id} className={`group border rounded-lg transition-all ${isExpanded ? 'bg-slate-50 dark:bg-slate-900 border-indigo-200 dark:border-slate-600 shadow-sm' : 'border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
@@ -278,10 +280,10 @@ const TaskPicker: React.FC<{
                     <button onClick={onClose}><X className="text-slate-400" /></button>
                 </div>
                 <div className="overflow-y-auto p-2 space-y-1 flex-1">
-                    {tasks.length === 0 && (
+                    {(tasks || []).length === 0 && (
                         <div className="p-4 text-center text-slate-400">Нет активных задач в бэклоге.</div>
                     )}
-                    {tasks.map(t => (
+                    {(tasks || []).map(t => (
                         <button 
                             key={t.id}
                             onClick={() => onPick(t)}
@@ -308,7 +310,7 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
     const [title, setTitle] = useState('План Недели');
     const [data, setData] = useState<WeeklyPlanData>({
         mainGoal: '',
-        focuses: [], // We will store 'general_tasks' inside here but filter it for UI
+        focuses: [], 
         kpis: [],
         checkpoints: []
     });
@@ -333,8 +335,17 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
                 setTitle(res.data.plan.title);
                 try {
                     const parsed = JSON.parse(res.data.plan.structureJson);
-                    setData(parsed);
-                } catch(e) { console.error(e); }
+                    // Defensive merge to ensure focuses is always an array
+                    setData({
+                        mainGoal: parsed.mainGoal || '',
+                        focuses: Array.isArray(parsed.focuses) ? parsed.focuses : [],
+                        kpis: Array.isArray(parsed.kpis) ? parsed.kpis : [],
+                        checkpoints: Array.isArray(parsed.checkpoints) ? parsed.checkpoints : []
+                    });
+                } catch(e) { 
+                    console.error(e); 
+                    setData(prev => ({ ...prev }));
+                }
             } else if (res.success) {
                 setTitle(res.data.plan.title);
             }
@@ -380,25 +391,21 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
     const updateFocus = (updated: FocusModule) => {
         setData(prev => ({
             ...prev,
-            focuses: prev.focuses.map(f => f.id === updated.id ? updated : f)
+            focuses: (prev.focuses || []).map(f => f.id === updated.id ? updated : f)
         }));
     };
 
     const addFocus = () => {
         setData(prev => ({
             ...prev,
-            focuses: [...prev.focuses, { id: crypto.randomUUID(), title: 'Новый Фокус', tasks: [] }]
+            focuses: [...(prev.focuses || []), { id: crypto.randomUUID(), title: 'Новый Фокус', tasks: [] }]
         }));
     };
 
     const moveFocus = (index: number, direction: -1 | 1) => {
-        // We need to operate on the FULL list but only swap visible ones? 
-        // Simplification: We will filter 'general_tasks' out, swap, then put it back at the end or keep it hidden.
-        // Actually simpler: Treat 'general_tasks' as just another focus but render it specially.
-        
-        // Let's filter general out for the move operation on "Strategic Focuses"
-        const strategic = data.focuses.filter(f => f.id !== 'general_tasks');
-        const general = data.focuses.find(f => f.id === 'general_tasks');
+        const focuses = data.focuses || [];
+        const strategic = focuses.filter(f => f.id !== 'general_tasks');
+        const general = focuses.find(f => f.id === 'general_tasks');
         
         if (index + direction < 0 || index + direction >= strategic.length) return;
         
@@ -415,14 +422,15 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
     const removeFocus = (id: string) => {
         setData(prev => ({
             ...prev,
-            focuses: prev.focuses.filter(f => f.id !== id)
+            focuses: (prev.focuses || []).filter(f => f.id !== id)
         }));
     };
 
     // --- BACKLOG LOGIC ---
 
     const ensureGeneralModule = () => {
-        const existing = data.focuses.find(f => f.id === 'general_tasks');
+        const focuses = data.focuses || [];
+        const existing = focuses.find(f => f.id === 'general_tasks');
         if (existing) return existing;
         
         const newGeneral: FocusModule = {
@@ -431,15 +439,11 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
             tasks: [],
             isCollapsed: false
         };
-        setData(prev => ({ ...prev, focuses: [...prev.focuses, newGeneral] }));
+        setData(prev => ({ ...prev, focuses: [...(prev.focuses || []), newGeneral] }));
         return newGeneral;
     };
 
     const handleImportTask = (taskEntity: TaskEntity) => {
-        // 1. Ensure general module exists
-        const general = ensureGeneralModule(); // This updates state async so we need to be careful? 
-        // Actually react state updates are batched usually but let's do it safely.
-        
         const newTask: PlanTask = {
             id: crypto.randomUUID(),
             title: taskEntity.title,
@@ -451,16 +455,17 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
         };
 
         setData(prev => {
-            const hasGeneral = prev.focuses.find(f => f.id === 'general_tasks');
+            const focuses = prev.focuses || [];
+            const hasGeneral = focuses.find(f => f.id === 'general_tasks');
             if (hasGeneral) {
                 return {
                     ...prev,
-                    focuses: prev.focuses.map(f => f.id === 'general_tasks' ? { ...f, tasks: [...f.tasks, newTask] } : f)
+                    focuses: focuses.map(f => f.id === 'general_tasks' ? { ...f, tasks: [...(f.tasks || []), newTask] } : f)
                 };
             } else {
                  return {
                     ...prev,
-                    focuses: [...prev.focuses, { 
+                    focuses: [...focuses, { 
                         id: 'general_tasks', 
                         title: 'Общие Задачи', 
                         tasks: [newTask],
@@ -477,12 +482,16 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
 
     const handleAiDraft = async () => {
         setAiLoading(true);
-        // FIX: Provide a safe context object
         const res = await AISimulator.generateResponse("GENERATE_WEEKLY_PLAN_STRUCTURE", { userProfile: { coachingProfile: {} } });
         if (res.suggestionPayload) {
             try {
                 const parsed = JSON.parse(res.suggestionPayload);
-                setData(parsed);
+                setData({
+                    mainGoal: parsed.mainGoal || '',
+                    focuses: Array.isArray(parsed.focuses) ? parsed.focuses : [],
+                    kpis: Array.isArray(parsed.kpis) ? parsed.kpis : [],
+                    checkpoints: Array.isArray(parsed.checkpoints) ? parsed.checkpoints : []
+                });
                 setTitle("Черновик AI");
             } catch (e) {
                 alert("Ошибка генерации плана.");
@@ -494,12 +503,16 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
     const handleAiOptimize = async () => {
         setAiLoading(true);
         const currentJson = JSON.stringify(data);
-        // FIX: Provide a safe context object
         const res = await AISimulator.generateResponse(`OPTIMIZE_PLAN:${currentJson}`, { userProfile: { coachingProfile: {} } });
         if (res.suggestionPayload) {
              try {
                 const parsed = JSON.parse(res.suggestionPayload);
-                setData(parsed);
+                setData({
+                    mainGoal: parsed.mainGoal || '',
+                    focuses: Array.isArray(parsed.focuses) ? parsed.focuses : [],
+                    kpis: Array.isArray(parsed.kpis) ? parsed.kpis : [],
+                    checkpoints: Array.isArray(parsed.checkpoints) ? parsed.checkpoints : []
+                });
                 alert(res.text);
             } catch (e) { alert("Ошибка оптимизации."); }
         }
@@ -509,15 +522,14 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
     const handleAiCritique = async () => {
         setAiLoading(true);
         const currentJson = JSON.stringify(data);
-        // FIX: Provide a safe context object
         const res = await AISimulator.generateResponse(`CRITIQUE_PLAN:${currentJson}`, { userProfile: { coachingProfile: {} } });
         alert(res.text);
         setAiLoading(false);
     };
 
     // Filter focuses for UI separation
-    const strategicFocuses = data.focuses.filter(f => f.id !== 'general_tasks');
-    const generalTasksModule = data.focuses.find(f => f.id === 'general_tasks') || { id: 'general_tasks', title: 'Общие Задачи', tasks: [] };
+    const strategicFocuses = (data.focuses || []).filter(f => f.id !== 'general_tasks');
+    const generalTasksModule = (data.focuses || []).find(f => f.id === 'general_tasks') || { id: 'general_tasks', title: 'Общие Задачи', tasks: [] };
 
     return (
         <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
@@ -531,7 +543,7 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
                     <button onClick={handleAiDraft} disabled={aiLoading} className="p-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-lg" title="Создать драфт">
                         <Bot size={20} className={aiLoading ? 'animate-spin' : ''} />
                     </button>
-                    <button onClick={handleAiOptimize} disabled={aiLoading} className="p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-lg" title="Оптимизировать">
+                    <button onClick={handleAiOptimize} disabled={aiLoading} className="p-2 bg-emerald-50 dark:bg-indigo-900/20 text-emerald-600 rounded-lg" title="Оптимизировать">
                         <Sparkles size={20} />
                     </button>
                     <button onClick={handleAiCritique} disabled={aiLoading} className="p-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 rounded-lg" title="Критика">
@@ -604,14 +616,13 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
                         </button>
                     </div>
 
-                    {/* We treat general tasks as a special focus module without the drag/delete header */}
                     <FocusModuleCard 
                         module={generalTasksModule}
                         onUpdate={(updated) => {
-                             // If it doesn't exist yet, we add it, otherwise update
-                             const exists = data.focuses.find(f => f.id === 'general_tasks');
+                             const focuses = data.focuses || [];
+                             const exists = focuses.find(f => f.id === 'general_tasks');
                              if (exists) updateFocus(updated);
-                             else setData(prev => ({ ...prev, focuses: [...prev.focuses, updated] }));
+                             else setData(prev => ({ ...prev, focuses: [...(prev.focuses || []), updated] }));
                         }}
                         onRemove={() => {}} 
                         onMoveUp={() => {}} 
@@ -629,18 +640,18 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
                             <Activity size={14} /> {labels.kpis || "KPIs"}
                         </label>
                         <button 
-                            onClick={() => setData(prev => ({...prev, kpis: [...prev.kpis, { id: crypto.randomUUID(), title: '', target: 10, current: 0, unit: 'count', isDone: false }] }))}
+                            onClick={() => setData(prev => ({...prev, kpis: [...(prev.kpis || []), { id: crypto.randomUUID(), title: '', target: 10, current: 0, unit: 'count', isDone: false }] }))}
                             className="text-indigo-600"
                         >
                             <Plus size={16} />
                         </button>
                     </div>
-                    {data.kpis.map((kpi, idx) => (
+                    {(data.kpis || []).map((kpi, idx) => (
                         <div key={kpi.id} className="flex items-center gap-2">
                             <input 
                                 value={kpi.title}
                                 onChange={(e) => {
-                                    const newKpis = [...data.kpis];
+                                    const newKpis = [...(data.kpis || [])];
                                     newKpis[idx].title = e.target.value;
                                     setData({...data, kpis: newKpis});
                                 }}
@@ -651,14 +662,14 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
                                 type="number"
                                 value={kpi.target}
                                 onChange={(e) => {
-                                    const newKpis = [...data.kpis];
+                                    const newKpis = [...(data.kpis || [])];
                                     newKpis[idx].target = parseFloat(e.target.value);
                                     setData({...data, kpis: newKpis});
                                 }}
                                 className="w-16 bg-slate-50 dark:bg-slate-900 p-2 rounded text-sm text-center dark:text-white outline-none"
                             />
                             <button 
-                                onClick={() => setData(prev => ({...prev, kpis: prev.kpis.filter(k => k.id !== kpi.id)}))}
+                                onClick={() => setData(prev => ({...prev, kpis: (prev.kpis || []).filter(k => k.id !== kpi.id)}))}
                                 className="text-slate-300 hover:text-rose-500"
                             >
                                 <Trash2 size={16} />
@@ -674,19 +685,19 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
                             <Calendar size={14} /> {labels.checkpoints}
                         </label>
                         <button 
-                            onClick={() => setData(prev => ({...prev, checkpoints: [...prev.checkpoints, { id: crypto.randomUUID(), title: 'Review', date: periodStart, isDone: false }] }))}
+                            onClick={() => setData(prev => ({...prev, checkpoints: [...(prev.checkpoints || []), { id: crypto.randomUUID(), title: 'Review', date: periodStart, isDone: false }] }))}
                             className="text-indigo-600"
                         >
                             <Plus size={16} />
                         </button>
                     </div>
-                    {data.checkpoints.map((cp, idx) => (
+                    {(data.checkpoints || []).map((cp, idx) => (
                         <div key={cp.id} className="flex items-center gap-2">
                             <input 
                                 type="date"
                                 value={new Date(cp.date).toISOString().split('T')[0]}
                                 onChange={(e) => {
-                                    const newCps = [...data.checkpoints];
+                                    const newCps = [...(data.checkpoints || [])];
                                     newCps[idx].date = new Date(e.target.value).getTime();
                                     setData({...data, checkpoints: newCps});
                                 }}
@@ -695,7 +706,7 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
                             <input 
                                 value={cp.title}
                                 onChange={(e) => {
-                                    const newCps = [...data.checkpoints];
+                                    const newCps = [...(data.checkpoints || [])];
                                     newCps[idx].title = e.target.value;
                                     setData({...data, checkpoints: newCps});
                                 }}
@@ -703,7 +714,7 @@ export const WeeklyPlanBuilder: React.FC<WeeklyPlanBuilderProps> = ({ userId, pl
                                 className="flex-1 bg-slate-50 dark:bg-slate-900 p-2 rounded text-sm dark:text-white outline-none"
                             />
                             <button 
-                                onClick={() => setData(prev => ({...prev, checkpoints: prev.checkpoints.filter(k => k.id !== cp.id)}))}
+                                onClick={() => setData(prev => ({...prev, checkpoints: (prev.checkpoints || []).filter(k => k.id !== cp.id)}))}
                                 className="text-slate-300 hover:text-rose-500"
                             >
                                 <Trash2 size={16} />

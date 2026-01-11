@@ -31,7 +31,8 @@ const RecurrenceEditor: React.FC<{
     onSave: (rule: RecurrenceRule | undefined) => void;
     onClose: () => void;
 }> = ({ rule, onSave, onClose }) => {
-    const [freq, setFreq] = useState<RecurrenceFrequency>(rule?.freq || 'DAILY');
+    // FIX: Use RecurrenceFrequency enum member instead of string literal
+    const [freq, setFreq] = useState<RecurrenceFrequency>(rule?.freq || RecurrenceFrequency.DAILY);
     const [interval, setInterval] = useState(rule?.interval || 1);
     const [daysOfWeek, setDaysOfWeek] = useState<number[]>(rule?.daysOfWeek || []);
     const [endType, setEndType] = useState<'NEVER' | 'DATE'>(rule?.endCondition === 'DATE' ? 'DATE' : 'NEVER');
@@ -60,10 +61,11 @@ const RecurrenceEditor: React.FC<{
 
     const applyPreset = (type: string) => {
         setPreset(type);
-        if (type === 'DAILY') { setFreq('DAILY'); setInterval(1); }
-        else if (type === 'WEEKLY') { setFreq('WEEKLY'); setInterval(1); setDaysOfWeek([]); }
-        else if (type === 'WEEKDAYS') { setFreq('WEEKLY'); setInterval(1); setDaysOfWeek([1, 2, 3, 4, 5]); }
-        else if (type === 'MONTHLY') { setFreq('MONTHLY'); setInterval(1); }
+        // FIX: Use RecurrenceFrequency enum members instead of string literals
+        if (type === 'DAILY') { setFreq(RecurrenceFrequency.DAILY); setInterval(1); }
+        else if (type === 'WEEKLY') { setFreq(RecurrenceFrequency.WEEKLY); setInterval(1); setDaysOfWeek([]); }
+        else if (type === 'WEEKDAYS') { setFreq(RecurrenceFrequency.WEEKLY); setInterval(1); setDaysOfWeek([1, 2, 3, 4, 5]); }
+        else if (type === 'MONTHLY') { setFreq(RecurrenceFrequency.MONTHLY); setInterval(1); }
     };
 
     return (
