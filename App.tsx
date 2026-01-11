@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Login } from './views/Login';
@@ -145,11 +146,14 @@ const App: React.FC = () => {
 
   const renderAuthenticatedView = () => {
     if (typeof currentView === 'object') {
+        if (currentView.type === 'TASK_CREATE') {
+            return <TaskForm userId={currentUser.id} initialPlannedAt={currentView.initialPlannedAt} onNavigateBack={() => setCurrentView('CALENDAR')} labels={labels} />;
+        }
         if (currentView.type === 'TASK_EDIT') {
             return <TaskForm userId={currentUser.id} taskId={currentView.taskId} initialTitle={currentView.initialTitle} onNavigateBack={() => setCurrentView('TASKS')} labels={labels} />;
         }
         if (currentView.type === 'TASK_DETAIL') {
-             return <TaskDetail taskId={currentView.taskId} onNavigateBack={() => setCurrentView('TASKS')} onNavigateEdit={() => setCurrentView({ type: 'TASK_EDIT', taskId: currentView.taskId })} labels={labels} />;
+             return <TaskDetail taskId={currentView.taskId} onNavigateBack={() => setCurrentView('TASKS')} onNavigateEdit={() => setCurrentView({ type: 'TASK_EDIT', taskId: currentView.taskId })} onNavigate={setCurrentView} labels={labels} />;
         }
         if (currentView.type === 'FOCUS') {
             return <FocusTimer taskId={currentView.taskId} onNavigateBack={() => setCurrentView('DASHBOARD')} labels={labels} />;

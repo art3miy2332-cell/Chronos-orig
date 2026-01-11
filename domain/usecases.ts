@@ -6,9 +6,9 @@ import { AIContextAggregator } from '../utils/ai-context';
 import { AISimulator } from '../utils/ai-simulator';
 import { HabitMapper, TaskMapper } from '../data/mappers';
 import { MapProgressService } from '../utils/map-progress';
+import { DatabaseService } from '../utils/db';
 
 // --- Task Use Cases ---
-// ... (CreateTaskUseCase, UpdateTaskUseCase, etc. - keep existing)
 
 export class CreateTaskUseCase {
     async execute(
@@ -171,7 +171,21 @@ export class DeleteTagUseCase { async execute(id: string) { return TagRepository
 
 // --- Session Use Cases ---
 export class StartSessionUseCase { async execute(userId: string, taskId: string | null) { return SessionRepository.createSession({ id: crypto.randomUUID(), userId, taskId: taskId || '', startTs: Date.now(), endTs: 0, durationMinutes: 0, interruptionsCount: 0 }); } }
-export class StopSessionUseCase { async execute(sessionId: string, durationMinutes: number) { return SessionRepository.updateSession({ id: sessionId, userId: '', taskId: '', startTs: 0, endTs: Date.now(), durationMinutes, interruptionsCount: 0 }); } }
+
+export class StopSessionUseCase { 
+    async execute(sessionId: string, durationMinutes: number) { 
+        const session = DatabaseService.sessions.getById(sessionId);
+        if (!session) return Result.notFound("Session not found");
+
+        const updated = {
+            ...session,
+            endTs: Date.now(),
+            durationMinutes: durationMinutes
+        };
+        return SessionRepository.updateSession(updated); 
+    } 
+}
+
 export class RecordInterruptionUseCase { async execute(sessionId: string) { return Result.success(undefined); } }
 
 // --- Suggestion Use Cases ---

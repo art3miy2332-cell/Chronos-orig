@@ -153,13 +153,15 @@ export const useTagsViewModel = () => {
     return { tags, createTag };
 };
 
-export const useTaskEditViewModel = (userId: string, taskId?: string, initialTitle?: string) => {
+export const useTaskEditViewModel = (userId: string, taskId?: string, initialTitle?: string, initialPlannedAt?: number) => {
     const [task, setTask] = useState<Partial<TaskEntity>>({
         title: initialTitle || '',
         priority: Priority.MEDIUM,
         energyLevel: EnergyLevel.MEDIUM,
-        estimateMinutes: 30,
-        tags: []
+        estimateMinutes: 60,
+        tags: [],
+        plannedAt: initialPlannedAt,
+        durationMinutes: 60
     });
     const [availableTags, setAvailableTags] = useState<TagEntity[]>([]);
     const [availableGoals, setAvailableGoals] = useState<GoalEntity[]>([]);
@@ -200,8 +202,6 @@ export const useTaskEditViewModel = (userId: string, taskId?: string, initialTit
         setSaving(true);
         let res;
         if (taskId) {
-            // Update
-            // We need full Task object for update, merging current state with existing
             const existingRes = TaskRepository.getTaskById(taskId);
             if (existingRes.success) {
                 const updated = { ...existingRes.data, ...task };
@@ -210,7 +210,6 @@ export const useTaskEditViewModel = (userId: string, taskId?: string, initialTit
                 res = { success: false, error: { message: "Task not found" } };
             }
         } else {
-            // Create
             res = await UseCases.createTask.execute(
                 userId,
                 task.title,

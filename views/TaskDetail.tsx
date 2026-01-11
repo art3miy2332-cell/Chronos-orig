@@ -1,6 +1,4 @@
 
-
-
 import React from 'react';
 import { useTaskDetailViewModel } from '../hooks/viewmodels';
 import { ArrowLeft, PlayCircle, CheckCircle2, Circle, Trash2, Edit2, Clock, Zap, Calendar, Sparkles } from 'lucide-react';
@@ -10,10 +8,11 @@ interface TaskDetailProps {
     taskId: string;
     onNavigateBack: () => void;
     onNavigateEdit: () => void;
+    onNavigate: (view: any) => void;
     labels: any;
 }
 
-export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, onNavigateBack, onNavigateEdit, labels }) => {
+export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, onNavigateBack, onNavigateEdit, onNavigate, labels }) => {
     const { task, sessions, linkedSuggestion, loading, toggleDone, deleteTask } = useTaskDetailViewModel(taskId);
 
     if (loading) return <div className="p-10 text-center">Loading...</div>;
@@ -30,7 +29,17 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, onNavigateBack, 
         }
     };
 
+    // Точное суммирование затраченного времени
     const totalTimeSpent = sessions.reduce((acc, s) => acc + s.durationMinutes, 0);
+    const estimate = task.estimateMinutes || 1; 
+
+    const handleStartFocus = () => {
+        // Переход в режим фокуса с текущей задачей
+        onNavigate({ type: 'FOCUS', taskId: task.id });
+    };
+
+    // Форматирование для отображения (если есть дробная часть, показываем 1 знак)
+    const formatTime = (t: number) => Number.isInteger(t) ? t : t.toFixed(1);
 
     return (
         <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
@@ -86,13 +95,13 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, onNavigateBack, 
                      <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-100 dark:border-slate-700">
                         <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Time Spent</div>
                         <div className="text-lg font-bold text-slate-900 dark:text-white flex items-baseline gap-1">
-                            {totalTimeSpent} <span className="text-xs font-normal text-slate-500">/ {task.estimateMinutes} min</span>
+                            {formatTime(totalTimeSpent)} <span className="text-xs font-normal text-slate-500">/ {task.estimateMinutes} min</span>
                         </div>
                         {/* Progress Bar */}
                         <div className="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
                             <div 
-                                className="bg-indigo-500 h-full rounded-full" 
-                                style={{ width: `${Math.min(100, (totalTimeSpent / task.estimateMinutes) * 100)}%` }} 
+                                className="bg-indigo-500 h-full rounded-full transition-all duration-700 ease-out" 
+                                style={{ width: `${Math.min(100, (totalTimeSpent / estimate) * 100)}%` }} 
                             />
                         </div>
                      </div>
@@ -126,8 +135,8 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, onNavigateBack, 
                          <p className="text-sm text-slate-400 italic">No focus sessions recorded yet.</p>
                      ) : (
                          <div className="space-y-2">
-                             {sessions.map(s => (
-                                 <div key={s.id} className="flex items-center justify-between bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-100 dark:border-slate-700">
+                             {sessions.slice().reverse().map(s => (
+                                 <div key={s.id} className="flex items-center justify-between bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-100 dark:border-slate-700 animate-in slide-in-from-top-1">
                                      <div className="flex items-center gap-3">
                                          <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-full text-indigo-600">
                                              <Clock size={16} />
@@ -137,7 +146,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, onNavigateBack, 
                                              <div className="text-xs text-slate-400">{new Date(s.startTs).toLocaleTimeString()}</div>
                                          </div>
                                      </div>
-                                     <span className="font-mono font-bold text-slate-900 dark:text-white">{s.durationMinutes}m</span>
+                                     <span className="font-mono font-bold text-slate-900 dark:text-white">{formatTime(s.durationMinutes)}m</span>
                                  </div>
                              ))}
                          </div>
@@ -147,7 +156,10 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, onNavigateBack, 
 
             {/* Sticky Action Button */}
             <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 pb-safe">
-                 <button className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-indigo-500/30 active:scale-95 transition-transform flex items-center justify-center gap-2">
+                 <button 
+                    onClick={handleStartFocus}
+                    className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-indigo-500/30 active:scale-95 transition-transform flex items-center justify-center gap-2"
+                >
                     <PlayCircle size={20} />
                     {labels.startFocus}
                 </button>

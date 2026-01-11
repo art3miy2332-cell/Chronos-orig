@@ -584,6 +584,7 @@ export interface Diagnostics {
 export type ViewState = 
     | 'DASHBOARD' | 'LIFE_MAP' | 'CALENDAR' | 'TASKS' | 'TASK_CREATE' | 'FOCUS' | 'AI_CHAT' | 'HABITS' | 'HABIT_CREATE' | 'CHECKLISTS' | 'GOALS' | 'SUGGESTION_LOG' | 'SETTINGS' | 'DEV' | 'AUTH_LOGIN' | 'AUTH_REGISTER' | 'ONBOARDING'
     | { type: 'TASK_EDIT', taskId?: string, initialTitle?: string }
+    | { type: 'TASK_CREATE', initialPlannedAt?: number }
     | { type: 'TASK_DETAIL', taskId: string }
     | { type: 'FOCUS', taskId?: string }
     | { type: 'HABIT_EDIT', habitId?: string }

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, memo } from 'react';
+import React, { useState, useEffect, memo, useRef } from 'react';
 import { Play, Pause, Square, SkipForward, Coffee, Zap, ArrowLeft, Settings, X } from 'lucide-react';
 import { useFocusViewModel } from '../hooks/viewmodels';
 import { AuthService } from '../utils/auth';
@@ -89,6 +89,15 @@ export const FocusTimer: React.FC<FocusTimerProps> = ({ taskId, onNavigateBack, 
     } = useFocusViewModel(user?.id, taskId);
 
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const autostarted = useRef(false);
+
+    // Auto-start if taskId is provided and state is IDLE
+    useEffect(() => {
+        if (taskId && state.status === 'IDLE' && !autostarted.current) {
+            autostarted.current = true;
+            startTimer(taskId);
+        }
+    }, [taskId, state.status, startTimer]);
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
