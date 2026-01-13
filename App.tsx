@@ -37,6 +37,7 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserEntity | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [currentView, setCurrentView] = useState<ViewState>('AUTH_LOGIN');
+  const [previousMainView, setPreviousMainView] = useState<ViewState>('DASHBOARD');
   const [tasks, setTasks] = useState<TaskEntity[]>([]);
   
   useEffect(() => {
@@ -121,6 +122,20 @@ const App: React.FC = () => {
       setCurrentView('AUTH_LOGIN');
   };
 
+  // Wrapper for navigation to track "from where"
+  const navigateTo = (view: ViewState) => {
+      // If current view is a main tab, save it as potential return point
+      const mainTabs = ['DASHBOARD', 'LIFE_MAP', 'CALENDAR', 'TASKS', 'HABITS', 'CHECKLISTS', 'GOALS', 'AI_CHAT', 'SETTINGS'];
+      if (typeof currentView === 'string' && mainTabs.includes(currentView)) {
+          setPreviousMainView(currentView);
+      }
+      setCurrentView(view);
+  };
+
+  const navigateBack = () => {
+      setCurrentView(previousMainView);
+  };
+
   if (isLoadingAuth) {
       return (
           <div className="h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 text-indigo-600 animate-pulse">
@@ -132,9 +147,9 @@ const App: React.FC = () => {
 
   if (!currentUser) {
       if (currentView === 'AUTH_REGISTER') {
-          return <Register onLoginSuccess={handleLoginSuccess} onNavigateLogin={() => setCurrentView('AUTH_LOGIN')} labels={LABELS['RU']} currentLang={'RU'} />;
+          return <Register onLoginSuccess={handleLoginSuccess} onNavigateLogin={() => navigateTo('AUTH_LOGIN')} labels={LABELS['RU']} currentLang={'RU'} />;
       }
-      return <Login onLoginSuccess={handleLoginSuccess} onNavigateRegister={() => setCurrentView('AUTH_REGISTER')} labels={LABELS['RU']} currentLang={'RU'} />;
+      return <Login onLoginSuccess={handleLoginSuccess} onNavigateRegister={() => navigateTo('AUTH_REGISTER')} labels={LABELS['RU']} currentLang={'RU'} />;
   }
   
   if (currentView === 'ONBOARDING') {
@@ -147,72 +162,72 @@ const App: React.FC = () => {
   const renderAuthenticatedView = () => {
     if (typeof currentView === 'object') {
         if (currentView.type === 'TASK_CREATE') {
-            return <TaskForm userId={currentUser.id} initialPlannedAt={currentView.initialPlannedAt} onNavigateBack={() => setCurrentView('CALENDAR')} labels={labels} />;
+            return <TaskForm userId={currentUser.id} initialPlannedAt={currentView.initialPlannedAt} onNavigateBack={navigateBack} labels={labels} />;
         }
         if (currentView.type === 'TASK_EDIT') {
-            return <TaskForm userId={currentUser.id} taskId={currentView.taskId} initialTitle={currentView.initialTitle} onNavigateBack={() => setCurrentView('TASKS')} labels={labels} />;
+            return <TaskForm userId={currentUser.id} taskId={currentView.taskId} initialTitle={currentView.initialTitle} onNavigateBack={() => navigateTo({ type: 'TASK_DETAIL', taskId: currentView.taskId! })} labels={labels} />;
         }
         if (currentView.type === 'TASK_DETAIL') {
-             return <TaskDetail taskId={currentView.taskId} onNavigateBack={() => setCurrentView('TASKS')} onNavigateEdit={() => setCurrentView({ type: 'TASK_EDIT', taskId: currentView.taskId })} onNavigate={setCurrentView} labels={labels} />;
+             return <TaskDetail taskId={currentView.taskId} onNavigateBack={navigateBack} onNavigateEdit={() => navigateTo({ type: 'TASK_EDIT', taskId: currentView.taskId })} onNavigate={navigateTo} labels={labels} />;
         }
         if (currentView.type === 'FOCUS') {
-            return <FocusTimer taskId={currentView.taskId} onNavigateBack={() => setCurrentView('DASHBOARD')} labels={labels} />;
+            return <FocusTimer taskId={currentView.taskId} onNavigateBack={navigateBack} labels={labels} />;
         }
         if (currentView.type === 'HABIT_EDIT') {
-            return <HabitForm userId={currentUser.id} habitId={currentView.habitId} onNavigateBack={() => setCurrentView('HABITS')} labels={labels} />;
+            return <HabitForm userId={currentUser.id} habitId={currentView.habitId} onNavigateBack={() => navigateTo({ type: 'HABIT_DETAIL', habitId: currentView.habitId! })} labels={labels} />;
         }
         if (currentView.type === 'HABIT_DETAIL') {
-            return <HabitDetail habitId={currentView.habitId} onNavigateBack={() => setCurrentView('HABITS')} onNavigateEdit={() => setCurrentView({ type: 'HABIT_EDIT', habitId: currentView.habitId })} labels={labels} />;
+            return <HabitDetail habitId={currentView.habitId} onNavigateBack={navigateBack} onNavigateEdit={() => navigateTo({ type: 'HABIT_EDIT', habitId: currentView.habitId })} labels={labels} />;
         }
         if (currentView.type === 'PLAN_EDITOR') {
             if (currentView.planType === PlanType.WEEKLY) {
-                return <WeeklyPlanBuilder userId={currentUser.id} planId={currentView.planId} periodStart={currentView.periodStart} onNavigateBack={() => setCurrentView('CHECKLISTS')} labels={labels} />;
+                return <WeeklyPlanBuilder userId={currentUser.id} planId={currentView.planId} periodStart={currentView.periodStart} onNavigateBack={() => navigateTo('CHECKLISTS')} labels={labels} />;
             } else if (currentView.planType === PlanType.MONTHLY) {
-                return <MonthlyPlanBuilder userId={currentUser.id} planId={currentView.planId} periodStart={currentView.periodStart} onNavigateBack={() => setCurrentView('CHECKLISTS')} labels={labels} />;
+                return <MonthlyPlanBuilder userId={currentUser.id} planId={currentView.planId} periodStart={currentView.periodStart} onNavigateBack={() => navigateTo('CHECKLISTS')} labels={labels} />;
             } else {
-                return <PlanEditor userId={currentUser.id} planId={currentView.planId} planType={currentView.planType} periodStart={currentView.periodStart} onNavigateBack={() => setCurrentView('CHECKLISTS')} labels={labels} />;
+                return <PlanEditor userId={currentUser.id} planId={currentView.planId} planType={currentView.planType} periodStart={currentView.periodStart} onNavigateBack={() => navigateTo('CHECKLISTS')} labels={labels} />;
             }
         }
         if (currentView.type === 'AI_DRAFTS') {
-             return <AIDrafts userId={currentUser.id} periodStart={currentView.periodStart} planType={currentView.planType} onNavigateBack={() => setCurrentView('CHECKLISTS')} labels={labels} />;
+             return <AIDrafts userId={currentUser.id} periodStart={currentView.periodStart} planType={currentView.planType} onNavigateBack={() => navigateTo('CHECKLISTS')} labels={labels} />;
         }
         if (currentView.type === 'AI_CHAT') {
-            return <AIChat userId={currentUser.id} labels={labels} user={currentUser} onNavigateSettings={() => setCurrentView('SETTINGS')} onNavigate={setCurrentView} initialScenario={currentView.scenario} initialPayload={currentView.payload} />;
+            return <AIChat userId={currentUser.id} labels={labels} user={currentUser} onNavigateSettings={() => navigateTo('SETTINGS')} onNavigate={navigateTo} initialScenario={currentView.scenario} initialPayload={currentView.payload} />;
         }
         if (currentView.type === 'DAILY_REFLECTION') {
-            return <DailyReflection userId={currentUser.id} insight={currentView.insight} onComplete={() => setCurrentView('DASHBOARD')} />;
+            return <DailyReflection userId={currentUser.id} insight={currentView.insight} onComplete={() => navigateTo('DASHBOARD')} />;
         }
         if (currentView.type === 'WEEKLY_REVIEW') {
-            return <WeeklyReview userId={currentUser.id} insight={currentView.insight} onComplete={() => setCurrentView('DASHBOARD')} />;
+            return <WeeklyReview userId={currentUser.id} insight={currentView.insight} onComplete={() => navigateTo('DASHBOARD')} />;
         }
         if (currentView.type === 'MONTHLY_REVIEW') {
-            return <MonthlyReview userId={currentUser.id} insight={currentView.insight} onComplete={() => setCurrentView('DASHBOARD')} />;
+            return <MonthlyReview userId={currentUser.id} insight={currentView.insight} onComplete={() => navigateTo('DASHBOARD')} />;
         }
         if (currentView.type === 'LIFE_MAP') {
-            return <LifeMapCanvas userId={currentUser.id} onNavigate={setCurrentView} focusGoalId={currentView.focusGoalId} />;
+            return <LifeMapCanvas userId={currentUser.id} onNavigate={navigateTo} focusGoalId={currentView.focusGoalId} />;
         }
     }
 
     switch (currentView) {
-      case 'DASHBOARD': return <Dashboard user={currentUser} tasks={tasks} onNavigate={setCurrentView} labels={labels} />;
-      case 'LIFE_MAP': return <LifeMapCanvas userId={currentUser.id} onNavigate={setCurrentView} />;
-      case 'CALENDAR': return <CalendarView userId={currentUser.id} onNavigate={setCurrentView} labels={labels} />;
-      case 'TASKS': return <Tasks userId={currentUser.id} onNavigate={setCurrentView} labels={labels} />;
-      case 'TASK_CREATE': return <TaskForm userId={currentUser.id} onNavigateBack={() => setCurrentView('TASKS')} labels={labels} />;
-      case 'FOCUS': return <FocusTimer labels={labels} onNavigateBack={() => setCurrentView('DASHBOARD')} />;
-      case 'AI_CHAT': return <AIChat userId={currentUser.id} labels={labels} user={currentUser} onNavigateSettings={() => setCurrentView('SETTINGS')} onNavigate={setCurrentView} />;
-      case 'HABITS': return <Habits userId={currentUser.id} onNavigate={setCurrentView} labels={labels} />;
-      case 'HABIT_CREATE': return <HabitForm userId={currentUser.id} onNavigateBack={() => setCurrentView('HABITS')} labels={labels} />;
-      case 'CHECKLISTS': return <Checklists userId={currentUser.id} onNavigate={setCurrentView} labels={labels} />;
-      case 'GOALS': return <Goals userId={currentUser.id} onNavigate={setCurrentView} labels={labels} />;
-      case 'SUGGESTION_LOG': return <SuggestionLog userId={currentUser.id} onNavigateBack={() => setCurrentView('CHECKLISTS')} labels={labels} />;
+      case 'DASHBOARD': return <Dashboard user={currentUser} tasks={tasks} onNavigate={navigateTo} labels={labels} />;
+      case 'LIFE_MAP': return <LifeMapCanvas userId={currentUser.id} onNavigate={navigateTo} />;
+      case 'CALENDAR': return <CalendarView userId={currentUser.id} onNavigate={navigateTo} labels={labels} />;
+      case 'TASKS': return <Tasks userId={currentUser.id} onNavigate={navigateTo} labels={labels} />;
+      case 'TASK_CREATE': return <TaskForm userId={currentUser.id} onNavigateBack={() => navigateTo('TASKS')} labels={labels} />;
+      case 'FOCUS': return <FocusTimer labels={labels} onNavigateBack={() => navigateTo('DASHBOARD')} />;
+      case 'AI_CHAT': return <AIChat userId={currentUser.id} labels={labels} user={currentUser} onNavigateSettings={() => navigateTo('SETTINGS')} onNavigate={navigateTo} />;
+      case 'HABITS': return <Habits userId={currentUser.id} onNavigate={navigateTo} labels={labels} />;
+      case 'HABIT_CREATE': return <HabitForm userId={currentUser.id} onNavigateBack={() => navigateTo('HABITS')} labels={labels} />;
+      case 'CHECKLISTS': return <Checklists userId={currentUser.id} onNavigate={navigateTo} labels={labels} />;
+      case 'GOALS': return <Goals userId={currentUser.id} onNavigate={navigateTo} labels={labels} />;
+      case 'SUGGESTION_LOG': return <SuggestionLog userId={currentUser.id} onNavigateBack={() => navigateTo('CHECKLISTS')} labels={labels} />;
       case 'SETTINGS': return <Settings user={currentUser} onUpdateUser={setCurrentUser} onLogout={handleLogout} labels={labels} />;
       case 'DEV': return <DevTests />;
-      default: return <Dashboard user={currentUser} tasks={tasks} onNavigate={setCurrentView} labels={labels} />;
+      default: return <Dashboard user={currentUser} tasks={tasks} onNavigate={navigateTo} labels={labels} />;
     }
   };
 
-  return <Layout currentView={currentView} onChangeView={(v) => setCurrentView(v)} labels={labels}>{renderAuthenticatedView()}</Layout>;
+  return <Layout currentView={currentView} onChangeView={(v) => navigateTo(v)} labels={labels}>{renderAuthenticatedView()}</Layout>;
 };
 
 export default App;

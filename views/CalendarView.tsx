@@ -32,6 +32,112 @@ const getEventColorClasses = (priority: Priority, isDone: boolean, hasTagColor: 
     }
 };
 
+const CalendarSettingsModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    settings: CalendarSettings;
+    onSave: (s: CalendarSettings) => void;
+}> = ({ isOpen, onClose, settings, onSave }) => {
+    const [localSettings, setLocalSettings] = useState(settings);
+
+    useEffect(() => {
+        if (isOpen) setLocalSettings(settings);
+    }, [isOpen, settings]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in">
+            <div className="glass-panel w-full max-w-sm rounded-3xl p-6 bg-white dark:bg-slate-900 shadow-2xl animate-in zoom-in-95">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <Settings size={20} className="text-indigo-500" /> Настройки календаря
+                    </h3>
+                    <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+                        <X className="text-slate-400" />
+                    </button>
+                </div>
+
+                <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Начало дня</label>
+                            <select 
+                                value={localSettings.workingHoursStart}
+                                onChange={(e) => setLocalSettings({...localSettings, workingHoursStart: parseInt(e.target.value)})}
+                                className="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                                {Array.from({length: 24}).map((_, i) => <option key={i} value={i}>{i}:00</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Конец дня</label>
+                            <select 
+                                value={localSettings.workingHoursEnd}
+                                onChange={(e) => setLocalSettings({...localSettings, workingHoursEnd: parseInt(e.target.value)})}
+                                className="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                                {Array.from({length: 24}).map((_, i) => <option key={i} value={i}>{i}:00</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="space-y-3">
+                        <button 
+                            onClick={() => setLocalSettings({...localSettings, hideNonWorkingHours: !localSettings.hideNonWorkingHours})}
+                            className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                        >
+                            <span className="text-sm font-medium dark:text-slate-200">Скрывать нерабочие часы</span>
+                            <div className={`w-10 h-5 rounded-full transition-colors relative ${localSettings.hideNonWorkingHours ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                                <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${localSettings.hideNonWorkingHours ? 'translate-x-5' : ''}`} />
+                            </div>
+                        </button>
+
+                        <button 
+                            onClick={() => setLocalSettings({...localSettings, showCompleted: !localSettings.showCompleted})}
+                            className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                        >
+                            <span className="text-sm font-medium dark:text-slate-200">Показывать выполненные</span>
+                            <div className={`w-10 h-5 rounded-full transition-colors relative ${localSettings.showCompleted ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                                <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${localSettings.showCompleted ? 'translate-x-5' : ''}`} />
+                            </div>
+                        </button>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                            <Globe size={10} /> Часовой пояс
+                        </label>
+                        <select 
+                            value={localSettings.timezone}
+                            onChange={(e) => setLocalSettings({...localSettings, timezone: e.target.value})}
+                            className="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm dark:text-white outline-none"
+                        >
+                            <option value="Europe/Moscow">Москва (UTC+3)</option>
+                            <option value="UTC">UTC / GMT</option>
+                            <option value="America/New_York">New York</option>
+                            <option value="Europe/London">London</option>
+                            <option value="Asia/Tokyo">Tokyo</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div className="mt-8 flex gap-3">
+                    <button onClick={onClose} className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-colors">
+                        Отмена
+                    </button>
+                    <button 
+                        onClick={() => { onSave(localSettings); onClose(); }}
+                        className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 active:scale-95 transition-all"
+                    >
+                        Применить
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const getEventsForDay = (dayColumnDate: Date, tasks: TaskEntity[], habits: HabitEntity[], settings: CalendarSettings, tags: TagEntity[]) => {
     const targetYear = dayColumnDate.getFullYear();
     const targetMonth = dayColumnDate.getMonth();
@@ -142,7 +248,6 @@ const TimeGrid: React.FC<{
         else redLineY = redLineY - (settings.workingHoursStart * rowHeight);
     }
     
-    const currentTimeLabel = `${nowZoned.hour.toString().padStart(2,'0')}:${nowZoned.minute.toString().padStart(2,'0')}`;
     const rowStyle = { height: `${rowHeight}px`, minHeight: `${rowHeight}px`, flexShrink: 0, boxSizing: 'border-box' as const };
     
     const visibleHoursCount = settings.hideNonWorkingHours 
@@ -219,6 +324,11 @@ const TimeGrid: React.FC<{
 
     const onPointerDown = (e: React.PointerEvent, task: TaskEntity, type: 'MOVE' | 'RESIZE') => {
         e.stopPropagation();
+        
+        if (window.navigator && window.navigator.vibrate) {
+            window.navigator.vibrate(20);
+        }
+
         const interaction = {
             type,
             task,
@@ -230,56 +340,54 @@ const TimeGrid: React.FC<{
             currentX: e.clientX
         };
 
-        if (e.pointerType === 'mouse') {
-            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-            setActiveInteraction(interaction);
-        } else {
-            setActiveInteraction(interaction);
-        }
+        const target = e.currentTarget as HTMLElement;
+        target.setPointerCapture(e.pointerId);
+        setActiveInteraction(interaction);
     };
 
     const onPointerMove = (e: React.PointerEvent) => {
         if (!activeInteraction) return;
-        if (e.pointerType !== 'mouse' && !containerRef.current?.hasPointerCapture?.(e.pointerId)) {
-            const dist = Math.sqrt(Math.pow(e.clientX - activeInteraction.initialX, 2) + Math.pow(e.clientY - activeInteraction.initialY, 2));
-            if (dist > 10) {
-                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-            } else {
-                return; 
-            }
-        }
-        setActiveInteraction({ ...activeInteraction, currentX: e.clientX, currentY: e.clientY });
+        e.stopPropagation();
+        setActiveInteraction(prev => prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null);
     };
 
     const onPointerUp = (e: React.PointerEvent) => {
         if (!activeInteraction) return;
+        e.stopPropagation();
+
         const { type, task, initialY, initialX, initialTime, initialDuration, currentY, currentX } = activeInteraction;
         const deltaY = currentY - initialY;
         const deltaX = currentX - initialX;
         const dist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
         
-        if (dist < 5) {
+        if (dist < 8) {
             onNavigate({ type: 'TASK_DETAIL', taskId: task.id.split('_')[0] });
-        } else if (containerRef.current?.hasPointerCapture?.(e.pointerId) || e.pointerType === 'mouse') {
+        } else {
             const deltaMinutes = Math.round(deltaY / (rowHeight / 4)) * 15;
+            
             if (type === 'RESIZE') {
                 const newDuration = Math.max(15, initialDuration + deltaMinutes);
-                if (newDuration !== initialDuration) onTaskResize(task, newDuration);
+                if (newDuration !== initialDuration) {
+                    onTaskResize(task, newDuration);
+                }
             } else {
                 const gridEl = containerRef.current;
                 if (gridEl) {
                     const dayCols = gridEl.querySelectorAll('.day-column');
                     const dayWidth = dayCols[0]?.clientWidth || 100;
                     const dayShift = Math.round(deltaX / dayWidth);
+                    
                     const newTime = new Date(initialTime);
                     newTime.setDate(newTime.getDate() + dayShift);
                     newTime.setMinutes(newTime.getMinutes() + deltaMinutes);
+                    
                     if (newTime.getTime() !== initialTime || dayShift !== 0) {
                         onTaskMove(task, newTime.getTime());
                     }
                 }
             }
         }
+        
         setActiveInteraction(null);
         if (e.currentTarget.hasPointerCapture(e.pointerId)) {
             e.currentTarget.releasePointerCapture(e.pointerId);
@@ -293,7 +401,6 @@ const TimeGrid: React.FC<{
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
         >
-            {/* Time labels column */}
             <div className="w-10 sm:w-12 flex-shrink-0 border-r border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col z-20 overflow-hidden relative">
                 <div style={{ height: `${HEADER_HEIGHT_PX}px` }} className="border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900"></div>
                 <div className="overflow-hidden flex-1" style={{ position: 'relative' }}>
@@ -313,7 +420,6 @@ const TimeGrid: React.FC<{
                 </div>
             </div>
             
-            {/* Scrollable grid area */}
             <div 
                 ref={containerRef} 
                 onScroll={handleScroll} 
@@ -327,7 +433,6 @@ const TimeGrid: React.FC<{
 
                         return (
                             <div key={dIdx} className={`day-column flex-1 border-r border-slate-100 dark:border-slate-800 relative group ${mode === 'WEEK' ? 'min-w-[42px] sm:min-w-[100px]' : 'min-w-full'}`}>
-                                {/* Header (Sticky) */}
                                 <div style={{ height: `${HEADER_HEIGHT_PX}px` }} className={`sticky top-0 border-b border-slate-100 dark:border-slate-800 flex items-center justify-center z-30 ${isToday ? 'bg-indigo-50 dark:bg-indigo-900/20' : 'bg-white dark:bg-slate-900'}`}>
                                     <div className="text-center">
                                         <div className="text-[8px] sm:text-[10px] uppercase text-slate-500 font-bold">
@@ -364,6 +469,7 @@ const TimeGrid: React.FC<{
                                         let startHour = 0;
                                         let duration = task.durationMinutes || task.estimateMinutes || 60;
                                         const isBeingInteracted = activeInteraction?.task.id === task.id;
+                                        
                                         if (isBeingInteracted && activeInteraction) {
                                             const deltaY = activeInteraction.currentY - activeInteraction.initialY;
                                             const deltaMinutes = Math.round(deltaY / (rowHeight / 4)) * 15;
@@ -393,17 +499,31 @@ const TimeGrid: React.FC<{
                                         const tagEntity = taskTag ? tags.find(t => t.name === taskTag) : null;
                                         const tagColor = tagEntity?.colorHex;
 
-                                        let blockClass = `absolute left-0.5 right-0.5 rounded sm:p-1 p-0.5 text-[8px] sm:text-[10px] font-medium overflow-hidden border cursor-grab active:cursor-grabbing z-10 hover:z-20 shadow-sm transition-shadow ${isBeingInteracted ? 'shadow-xl scale-[1.02] opacity-90 z-50 ring-2 ring-indigo-50 cursor-grabbing' : ''} `;
+                                        let blockClass = `absolute left-0.5 right-0.5 rounded sm:p-1 p-0.5 text-[8px] sm:text-[10px] font-medium overflow-hidden border cursor-grab active:cursor-grabbing z-10 hover:z-20 shadow-sm transition-shadow touch-none ${isBeingInteracted ? 'shadow-xl scale-[1.02] opacity-90 z-50 ring-2 ring-indigo-500/30 cursor-grabbing' : ''} `;
                                         blockClass += getEventColorClasses(task.priority, isDone, !!tagColor);
                                         
-                                        const inlineStyle: React.CSSProperties = { top: `${top}px`, height: `${Math.max(18, height)}px`, touchAction: 'pan-y' };
+                                        const inlineStyle: React.CSSProperties = { top: `${top}px`, height: `${Math.max(18, height)}px` };
                                         if (tagColor && !isDone) inlineStyle.backgroundColor = tagColor;
 
                                         return (
-                                            <div key={task.id} onPointerDown={(e) => onPointerDown(e, task, 'MOVE')} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className={blockClass} style={inlineStyle}>
-                                                <div className="truncate font-bold leading-tight">{isRecurring && <Repeat size={7} className="inline mr-0.5" />}{task.title}</div>
-                                                <div className="truncate opacity-80 sm:block hidden">{duration}m {isDone && <Check size={8} />}</div>
-                                                {!isDone && ( <div className="absolute bottom-0 left-0 right-0 h-2 sm:h-3 cursor-ns-resize flex items-center justify-center group/resize" onPointerDown={(e) => onPointerDown(e, task, 'RESIZE')}> <div className="w-4 sm:w-6 h-0.5 sm:h-1 bg-black/10 rounded-full group-hover/resize:bg-black/30" /> </div> )}
+                                            <div 
+                                                key={task.id} 
+                                                onPointerDown={(e) => onPointerDown(e, task, 'MOVE')} 
+                                                onPointerMove={onPointerMove} 
+                                                onPointerUp={onPointerUp} 
+                                                className={blockClass} 
+                                                style={inlineStyle}
+                                            >
+                                                <div className="truncate font-bold leading-tight pointer-events-none">{isRecurring && <Repeat size={7} className="inline mr-0.5" />}{task.title}</div>
+                                                <div className="truncate opacity-80 sm:block hidden pointer-events-none">{duration}m {isDone && <Check size={8} />}</div>
+                                                {!isDone && ( 
+                                                    <div 
+                                                        className="absolute bottom-0 left-0 right-0 h-4 cursor-ns-resize flex items-center justify-center group/resize touch-none" 
+                                                        onPointerDown={(e) => onPointerDown(e, task, 'RESIZE')}
+                                                    > 
+                                                        <div className="w-6 sm:w-8 h-1 bg-black/10 rounded-full group-hover/resize:bg-black/30" /> 
+                                                    </div> 
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -497,6 +617,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ userId, onNavigate, 
 
     useEffect(() => { refreshData(); }, [userId]);
 
+    const handleSaveSettings = (newSettings: CalendarSettings) => {
+        setSettings(newSettings);
+        const user = AuthService.getCurrentUser();
+        if (user) {
+            const updated = { ...user, calendarSettings: newSettings };
+            AuthService.updateUser(updated);
+        }
+    };
+
     const handleSwipe = (direction: 'PREV' | 'NEXT') => {
         const d = new Date(currentDate);
         const offset = settings.viewMode === 'WEEK' ? 7 : 1;
@@ -507,8 +636,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ userId, onNavigate, 
 
     const handleTaskMove = async (task: TaskEntity, newTime: number) => {
         const isRecurring = task.id.includes('_recur_') || (task.recurrence && !task.parentTaskId);
-        if (isRecurring) setPendingRecurrenceAction({ type: 'MOVE', task, newStart: newTime });
-        else {
+        if (isRecurring) {
+            setPendingRecurrenceAction({ type: 'MOVE', task, newStart: newTime });
+        } else {
             const updated = { ...task, plannedAt: newTime };
             setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
             await UseCases.updateTask.execute(TaskMapper.toDomain(updated));
@@ -517,8 +647,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ userId, onNavigate, 
 
     const handleTaskResize = async (task: TaskEntity, newDuration: number) => {
         const isRecurring = task.id.includes('_recur_') || (task.recurrence && !task.parentTaskId);
-        if (isRecurring) setPendingRecurrenceAction({ type: 'RESIZE', task, newDuration });
-        else {
+        if (isRecurring) {
+            setPendingRecurrenceAction({ type: 'RESIZE', task, newDuration });
+        } else {
             const updated = { ...task, durationMinutes: newDuration, estimateMinutes: newDuration };
             setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
             await UseCases.updateTask.execute(TaskMapper.toDomain(updated));
@@ -575,7 +706,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ userId, onNavigate, 
                         <button onClick={() => handleSwipe('PREV')} className="p-1 text-slate-500 hover:text-indigo-600"><ChevronLeft /></button>
                         <button onClick={() => handleSwipe('NEXT')} className="p-1 text-slate-500 hover:text-indigo-600"><ChevronRight /></button>
                     </div>
-                    <button onClick={() => setIsSettingsOpen(true)} className="p-1.5 rounded text-slate-400 hover:text-indigo-600"><Settings size={18} /></button>
+                    <button onClick={() => setIsSettingsOpen(true)} className="p-1.5 rounded text-slate-400 hover:text-indigo-600 transition-colors">
+                        <Settings size={18} />
+                    </button>
                 </div>
             </div>
             
@@ -603,7 +736,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ userId, onNavigate, 
             </div>
 
             <button onClick={() => handleSlotClick(Date.now())} className="absolute bottom-20 right-4 w-12 h-12 bg-indigo-600 text-white rounded-full shadow-lg flex items-center justify-center z-40 hover:scale-105 active:scale-95 transition-transform"><Plus size={24} /></button>
+            
             <RecurrenceConfirmationModal isOpen={!!pendingRecurrenceAction} onClose={() => setPendingRecurrenceAction(null)} onConfirm={handleRecurrenceConfirm} />
+            
+            <CalendarSettingsModal 
+                isOpen={isSettingsOpen} 
+                onClose={() => setIsSettingsOpen(false)} 
+                settings={settings} 
+                onSave={handleSaveSettings} 
+            />
         </div>
     );
 };

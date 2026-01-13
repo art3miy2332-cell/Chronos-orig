@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Minus, Navigation, Type, Undo, Redo, Trash2, Target, MousePointer2, AlertCircle, RefreshCw, X, Zap, ChevronRight, LayoutList, User, Calendar, ExternalLink, Save, Battery, Link2, Ban, ArrowRight, Layers, Lightbulb, HelpCircle, AlertTriangle, Book, Brain, FlaskConical, CheckSquare, GripHorizontal, ShieldAlert, Tag as TagIcon, Trophy, TrendingUp } from 'lucide-react';
 import { DatabaseService } from '../../utils/db';
@@ -18,7 +17,7 @@ interface Props {
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 3.0;
 const FUTURE_TAG_PRESETS = ["Здоровье", "Спорт", "Карьера", "Финансы", "Разум", "Семья"];
-const CLICK_THRESHOLD = 5; // Pixels to distinguish click from drag
+const CLICK_THRESHOLD = 5; 
 
 const uuid = () => crypto.randomUUID();
 
@@ -306,7 +305,7 @@ const NodeInspector: React.FC<{
                             <input value={label} onChange={e => setLabel(e.target.value)} className="w-full p-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base dark:text-white outline-none focus:border-indigo-500 transition-colors" />
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">{node.type === MapNodeType.LIMITATION ? "Как это мешает достижению цели?" : "Описание / Мылы"}</label>
+                            <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">{node.type === MapNodeType.LIMITATION ? "Как это мешает достижению цели?" : "Описание / Мысли"}</label>
                             <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder={node.type === MapNodeType.LIMITATION ? "Опишите почему это является препятствием..." : "Добавьте детали..."} className="w-full p-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base dark:text-white outline-none focus:border-indigo-500 transition-colors resize-none h-24" />
                         </div>
                     </div>
@@ -396,6 +395,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     const [unmappedGoals, setUnmappedGoals] = useState<GoalEntity[]>([]);
     const [unmappedTasks, setUnmappedTasks] = useState<TaskEntity[]>([]);
     const containerRef = useRef<HTMLDivElement>(null);
+    const lastFocusedIdRef = useRef<string | null>(null);
 
     // Refs for pinch-to-zoom
     const initialPinchDist = useRef<number | null>(null);
@@ -443,9 +443,10 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     };
 
     useEffect(() => {
-        if (focusGoalId && nodes.length > 0 && mapId) {
+        if (focusGoalId && nodes.length > 0 && mapId && lastFocusedIdRef.current !== focusGoalId) {
             const targetNode = nodes.find(n => n.references?.goalId === focusGoalId);
             if (targetNode) {
+                lastFocusedIdRef.current = focusGoalId;
                 if (containerRef.current) {
                     const w = containerRef.current.clientWidth;
                     const h = containerRef.current.clientHeight;
@@ -516,7 +517,6 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         } else { setViewport(prev => ({ ...prev, x: prev.x - e.deltaX, y: prev.y - e.deltaY })); }
     };
 
-    // TOUCH HANDLERS FOR PINCH-TO-ZOOM
     const handleTouchStart = (e: React.TouchEvent) => {
         if (e.touches.length === 2) {
             const d = Math.hypot(
@@ -531,31 +531,20 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     const handleTouchMove = (e: React.TouchEvent) => {
         if (e.touches.length === 2 && initialPinchDist.current !== null && initialPinchViewport.current !== null) {
             if (e.cancelable) e.preventDefault();
-            
             const currentDist = Math.hypot(
                 e.touches[0].clientX - e.touches[1].clientX,
                 e.touches[0].clientY - e.touches[1].clientY
             );
-            
             const pinchRatio = currentDist / initialPinchDist.current;
             const newZoom = Math.min(Math.max(ZOOM_MIN, initialPinchViewport.current.zoom * pinchRatio), ZOOM_MAX);
-            
-            // Calculate midpoint of the pinch in screen coordinates
-            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-            const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-            
-            // Get container offset
             if (containerRef.current) {
                 const rect = containerRef.current.getBoundingClientRect();
+                const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
                 const screenPinchX = midX - rect.left;
                 const screenPinchY = midY - rect.top;
-                
-                // Keep world coordinate under pinch fixed:
-                // worldX = (screenX - viewportX) / zoom
-                // newViewportX = screenX - worldX * newZoom
                 const worldX = (screenPinchX - initialPinchViewport.current.x) / initialPinchViewport.current.zoom;
                 const worldY = (screenPinchY - initialPinchViewport.current.y) / initialPinchViewport.current.zoom;
-                
                 setViewport({
                     zoom: newZoom,
                     x: screenPinchX - worldX * newZoom,
@@ -575,13 +564,17 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     const handleCanvasPointerDown = (e: React.PointerEvent) => {
         if (edgeDraftMenu) setEdgeDraftMenu(null);
         if (e.button !== 0) return; 
+        
+        const isBg = (e.target as HTMLElement).id === 'canvas-bg' || e.target === containerRef.current;
+        if (!isBg) return;
+
         setSelectedNodeIds(new Set()); 
         setSelectedEdgeId(null); 
         setActiveInspectorNodeId(null); 
         setInteractionMode('PANNING'); 
         setDragStartPos({ x: e.clientX, y: e.clientY }); 
         setEditingNodeId(null); 
-        (e.currentTarget as Element).setPointerCapture(e.pointerId);
+        containerRef.current?.setPointerCapture(e.pointerId);
     };
 
     const handleNodePointerDown = (e: React.PointerEvent, nodeId: string) => {
@@ -592,7 +585,11 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                 const newSet = new Set(selectedNodeIds);
                 if (newSet.has(nodeId)) newSet.delete(nodeId); else newSet.add(nodeId);
                 setSelectedNodeIds(newSet);
-            } else { if (!selectedNodeIds.has(nodeId)) setSelectedNodeIds(new Set([nodeId])); }
+            } else { 
+                if (!selectedNodeIds.has(nodeId)) {
+                    setSelectedNodeIds(new Set([nodeId])); 
+                }
+            }
             
             setSelectedEdgeId(null); 
             setInteractionMode('DRAGGING'); 
@@ -706,7 +703,6 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         if (!edgeDraftMenu) return;
         const newEdge: MapEdgeEntity = { id: uuid(), mapId: mapId!, sourceNodeId: edgeDraftMenu.sourceId, targetNodeId: edgeDraftMenu.targetId, relationType: type, meta: createMeta() };
         const newEdges = [...edges, newEdge];
-        // Fix: Corrected the first argument of saveToDb from newEdges to nodes
         setEdges(newEdges); pushToHistory(nodes, newEdges, 'CONNECT'); saveToDb(nodes, newEdges); setEdgeDraftMenu(null);
     };
 
@@ -719,18 +715,19 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     };
 
     const handleCanvasDoubleClick = (e: React.MouseEvent) => {
-        if (e.target !== containerRef.current && (e.target as HTMLElement).id !== 'canvas-bg') return;
-        if (containerRef.current) {
-            const rect = containerRef.current.getBoundingClientRect();
-            const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, viewport);
-            const newNode: MapNodeEntity = { id: uuid(), mapId: mapId!, type: MapNodeType.NOTE, position: worldPos, content: { label: "Заметка" }, references: {}, meta: createMeta() };
-            const newNodes = [...nodes, newNode];
-            setNodes(newNodes); 
-            setSelectedNodeIds(new Set([newNode.id])); 
-            setEditingNodeId(newNode.id); 
-            setEditText(newNode.content.label);
-            setActiveInspectorNodeId(newNode.id);
-            pushToHistory(newNodes, edges, 'ADD_NODE'); saveToDb(newNodes, edges);
+        if (e.target !== containerRef.current && (e.target as HTMLElement).id === 'canvas-bg') {
+            if (containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, viewport);
+                const newNode: MapNodeEntity = { id: uuid(), mapId: mapId!, type: MapNodeType.NOTE, position: worldPos, content: { label: "Заметка" }, references: {}, meta: createMeta() };
+                const newNodes = [...nodes, newNode];
+                setNodes(newNodes); 
+                setSelectedNodeIds(new Set([newNode.id])); 
+                setEditingNodeId(newNode.id); 
+                setEditText(newNode.content.label);
+                setActiveInspectorNodeId(newNode.id);
+                pushToHistory(newNodes, edges, 'ADD_NODE'); saveToDb(newNodes, edges);
+            }
         }
     };
 
@@ -745,7 +742,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         const w = containerRef.current.clientWidth, h = containerRef.current.clientHeight;
         const worldPos = screenToWorld(w / 2, h / 2, viewport);
         const res = await UseCases.linkGoalToMap.execute(mapId, goal.id, worldPos);
-        if (res.success) { await loadData(mapId); const updated = DatabaseService.mapNodes.getByMapId(mapId); pushToHistory(updated, edges, 'ADD_NODE', `Added Goal: ${goal.title}`); }
+        if (res.success) { await loadData(mapId); }
     };
 
     const handleAddExistingTask = async (task: TaskEntity) => {
@@ -789,7 +786,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         const newEdges = edges.filter(e => !toDelete.includes(e.sourceNodeId) && !toDelete.includes(e.targetNodeId));
         setNodes(newNodes); setEdges(newEdges); setSelectedNodeIds(new Set());
         setActiveInspectorNodeId(null);
-        pushToHistory(newNodes, newEdges, 'DELETE_NODE'); saveToDb(newNodes, newEdges);
+        pushToHistory(newNodes, edges, 'DELETE_NODE'); saveToDb(newNodes, edges);
     };
 
     const focusNode = (id?: string) => {
@@ -819,7 +816,6 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
 
     return (
         <div className="w-full h-full relative overflow-hidden bg-slate-50 dark:bg-slate-950 select-none font-sans" style={{ touchAction: 'none' }}>
-            {/* Global Master Progress Bar - Adaptive */}
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[90vw] md:w-full md:max-w-md px-1 md:px-4">
                 <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-2 md:p-3 flex flex-col gap-1.5 md:gap-2">
                     <div className="flex justify-between items-center px-1">
@@ -843,7 +839,6 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                 </div>
             </div>
 
-            {/* Controls Toolbar */}
             <div className="absolute top-20 md:top-4 left-4 z-20 flex flex-col gap-2">
                 <div className="bg-white dark:bg-slate-900 p-1.5 md:p-2 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col gap-1.5 md:gap-2">
                     <button onClick={() => { if (containerRef.current) { const w = containerRef.current.clientWidth, h = containerRef.current.clientHeight; const center = screenToWorld(w/2, h/2, viewport); const newNode: MapNodeEntity = { id: uuid(), mapId: mapId!, type: MapNodeType.NOTE, position: center, content: { label: "Заметка" }, references: {}, meta: createMeta() }; const newNodes = [...nodes, newNode]; setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE'); saveToDb(newNodes, edges); } }} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Add Note"><Brain size={18} className="md:w-5 md:h-5" /></button>
@@ -862,7 +857,6 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                 </div>
             )}
 
-            {/* Analysis Button */}
             <button 
                 onClick={() => setShowAnalysis(!showAnalysis)} 
                 className={`absolute top-20 md:top-4 right-4 z-30 flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 rounded-xl shadow-lg border transition-all ${analysisResult && analysisResult.issues.length > 0 ? 'bg-amber-100 border-amber-300 text-amber-700 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500'}`}
@@ -927,6 +921,14 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                         const isNote = node.type === MapNodeType.NOTE;
                         const isBarrier = node.type === MapNodeType.LIMITATION;
                         const isFutureSelf = node.type === MapNodeType.FUTURE_SELF;
+                        
+                        // Node dynamic styling
+                        const nodeBg = isNote ? 'bg-slate-50 dark:bg-slate-800' :
+                                       isBarrier ? 'bg-rose-50 border-rose-200 dark:bg-rose-900/20 dark:border-rose-900/50' :
+                                       node.type === MapNodeType.CURRENT_SELF ? 'bg-indigo-50 dark:bg-indigo-900/20' :
+                                       isFutureSelf ? 'bg-emerald-50 dark:bg-emerald-900/20' :
+                                       'bg-white dark:bg-slate-900'; // Fallback for Goals/Steps
+
                         let timeProgress = 0, orbitColor = "#3b82f6";
                         if (isFutureSelf && node.content.futureSelfData?.horizon?.targetDate) {
                             const start = node.meta.createdAt, end = node.content.futureSelfData.horizon.targetDate, nowTs = Date.now();
@@ -934,11 +936,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                         }
                         return (
                             <div key={node.id} data-node-id={node.id} onPointerDown={(e) => handleNodePointerDown(e, node.id)} onDoubleClick={(e) => handleNodeDoubleClick(e, node)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ transform: `translate(${node.position.x}px, ${node.position.y}px)`, width: '150px', minHeight: '60px', touchAction: 'none' }}
-                                className={`absolute top-0 left-0 rounded-xl shadow-sm border-2 flex flex-col justify-center items-center p-3 transition-all hover:shadow-lg group ${borderColor}
-                                    ${node.type === MapNodeType.CURRENT_SELF ? 'bg-indigo-50 dark:bg-indigo-900/20' : ''}
-                                    ${isFutureSelf ? 'bg-emerald-50 dark:bg-emerald-900/20' : ''}
-                                    ${isNote ? 'bg-slate-50 dark:bg-slate-800' : ''}
-                                    ${isBarrier ? 'bg-rose-50 border-rose-200 dark:bg-rose-900/20 dark:border-rose-900/50' : 'bg-white'}
+                                className={`absolute top-0 left-0 rounded-xl shadow-sm border-2 flex flex-col justify-center items-center p-3 transition-all hover:shadow-lg group ${borderColor} ${nodeBg}
                                     ${isHoveredForConnection ? 'ring-4 ring-emerald-400 border-emerald-500 scale-105 z-10' : ''}
                                 `}
                             >
