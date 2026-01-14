@@ -304,24 +304,27 @@ export const Tasks: React.FC<TasksProps> = ({ userId, onNavigate, labels }) => {
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                            <div className="flex items-center gap-0.5 z-10 shrink-0">
                                  <button 
                                     onClick={(e) => { e.stopPropagation(); setSchedulingTask(task); }}
-                                    className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"
+                                    className="p-1.5 text-slate-300 dark:text-slate-600 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                                    title="Запланировать"
                                 >
-                                    <Calendar size={18} />
+                                    <Calendar size={15} />
                                 </button>
                                  <button 
                                     onClick={(e) => { e.stopPropagation(); onNavigate({ type: 'FOCUS', taskId: task.id }); }} 
-                                    className="p-2 text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"
+                                    className="p-1.5 text-slate-300 dark:text-slate-600 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                                    title="Начать фокус"
                                 >
-                                    <Play size={18} />
+                                    <Play size={15} />
                                 </button>
                                 <button 
                                     onClick={(e) => handleDeleteClick(e, task.id)}
-                                    className="p-2 text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full pointer-events-auto"
+                                    className="p-1.5 text-slate-300 dark:text-slate-600 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                                    title="Удалить"
                                 >
-                                    <Trash2 size={18} />
+                                    <Trash2 size={15} />
                                 </button>
                             </div>
                         </div>

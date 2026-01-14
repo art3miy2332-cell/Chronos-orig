@@ -219,27 +219,46 @@ export class RecalcGoalProgressUseCase {
         
         const goal = goalRes;
         
-        // 1. Tasks
-        const tasks = TaskRepository.getTasksForUser(goal.ownerId).data.filter(t => t.goalId === goalId);
-        const totalTasks = tasks.length;
-        const completedTasks = tasks.filter(t => t.status === TaskStatus.DONE).length;
+        // 1. Fetch all related tasks
+        const allUserTasks = TaskRepository.getTasksForUser(goal.ownerId).data;
+        const goalTasks = allUserTasks.filter(t => t.goalId === goalId);
+        const totalTasks = goalTasks.length;
+        const completedTasks = goalTasks.filter(t => t.status === TaskStatus.DONE).length;
         const taskProgress = totalTasks > 0 ? (completedTasks / totalTasks) : 0;
 
-        // 2. Habits
+        // 2. Auto-update roadmap status based on linked tasks
+        // If a stage has tasks and they are all DONE, the stage should be marked completed automatically.
+        const updatedRoadmap = goal.roadmap.map(m => {
+            const stageTasks = goalTasks.filter(t => t.stageId === m.id);
+            if (stageTasks.length > 0) {
+                return { ...m, completed: stageTasks.every(t => t.status === TaskStatus.DONE) };
+            }
+            return m; // If no tasks in stage, keep manual completion status
+        });
+        
+        // Update goal with synced roadmap
+        goal.roadmap = updatedRoadmap;
+
+        // 3. Habits
         const habits = HabitRepository.getHabitsForUser(goal.ownerId).data.filter(h => h.goalId === goalId);
         let habitScore = 0;
         if (habits.length > 0) {
             let totalConsistency = 0;
             habits.forEach(h => {
-                totalConsistency += Math.min(1, h.streak / 7);
+                // Consistency Score (0-100% based on streak/history)
+                const now = Date.now();
+                const thirtyDaysAgo = now - (30 * 86400000);
+                const hits = h.history.filter(ts => ts >= thirtyDaysAgo).length;
+                const expected = h.frequency === HabitFrequency.DAILY ? 30 : 4;
+                const consistency = Math.min(1, hits / expected);
+                totalConsistency += consistency;
             });
             habitScore = totalConsistency / habits.length;
         }
 
-        // 3. Roadmap
-        const milestones = goal.roadmap;
-        const totalMilestones = milestones.length;
-        const completedMilestones = milestones.filter(m => m.completed).length;
+        // 4. Roadmap Score
+        const totalMilestones = goal.roadmap.length;
+        const completedMilestones = goal.roadmap.filter(m => m.completed).length;
         const roadmapScore = totalMilestones > 0 ? (completedMilestones / totalMilestones) : 0;
 
         // WEIGHTS CONFIG
@@ -258,26 +277,27 @@ export class RecalcGoalProgressUseCase {
                         (habitScore * habitWeight) + 
                         (roadmapScore * roadmapWeight);
             finalProgress = Math.round((raw / activeWeights) * 100);
+        } else if (totalTasks === 0 && habits.length === 0 && totalMilestones === 0) {
+            // Empty goal is 0%
+            finalProgress = 0;
         }
 
         // Automatic Status Update Logic
         let newStatus = goal.status;
         
-        // Only update status automatically if not manually Paused or Completed
-        if (goal.status !== GoalStatus.PAUSED && goal.status !== GoalStatus.COMPLETED) {
+        if (finalProgress === 100) {
+            newStatus = GoalStatus.COMPLETED;
+        } else if (goal.status !== GoalStatus.PAUSED && goal.status !== GoalStatus.COMPLETED) {
             const now = Date.now();
             const totalDuration = goal.endDate - goal.startDate;
             const elapsed = now - goal.startDate;
             
-            // Avoid division by zero
             if (totalDuration > 0) {
                 const timeRatio = elapsed / totalDuration;
-                
                 // If 75% of time passed but less than 50% progress -> At Risk
                 if (timeRatio > 0.75 && finalProgress < 50) {
                     newStatus = GoalStatus.AT_RISK;
                 } else if (newStatus === GoalStatus.AT_RISK && finalProgress >= 50) {
-                    // Recovered from risk
                     newStatus = GoalStatus.ACTIVE;
                 }
             }
@@ -538,6 +558,53 @@ export class DeleteGoalUseCase {
     }
 }
 
+export class CompleteGoalStageUseCase {
+    async execute(goalId: string, stageId: string): Promise<RepoResult<void>> {
+        const goal = GoalRepository.getById(goalId);
+        if (!goal) return Result.notFound("Goal not found");
+
+        // 1. Mark tasks as DONE
+        const allTasks = TaskRepository.getTasksForUser(goal.ownerId).data;
+        const stageTasks = allTasks.filter(t => t.goalId === goalId && t.stageId === stageId);
+        for (const task of stageTasks) {
+            if (task.status !== TaskStatus.DONE) {
+                const updated = { ...task, status: TaskStatus.DONE, doneAt: Date.now() };
+                TaskRepository.updateTask(TaskMapper.toDomain(updated));
+            }
+        }
+
+        // 2. Mark stage KPIs as completed
+        const updatedKpis = goal.kpis.map(k => {
+            if (k.stageId === stageId) {
+                return { ...k, current: k.target, isDone: true };
+            }
+            return k;
+        });
+
+        // 3. Update roadmap stage
+        const updatedRoadmap = goal.roadmap.map(s => {
+            if (s.id === stageId) {
+                return { ...s, completed: true };
+            }
+            return s;
+        });
+
+        // 4. Save Goal
+        const updatedGoal = { 
+            ...goal, 
+            kpis: updatedKpis, 
+            roadmap: updatedRoadmap, 
+            updatedAt: Date.now() 
+        };
+        GoalRepository.update(updatedGoal);
+
+        // 5. Trigger general progress recalc
+        await UseCases.recalcGoalProgress.execute(goalId);
+
+        return Result.success(undefined);
+    }
+}
+
 // --- MAP & GOAL INTEGRATION USE CASES ---
 
 export class LinkGoalToMapUseCase {
@@ -690,6 +757,7 @@ export const UseCases = {
     addStageToGoal: new AddStageToGoalUseCase(),
     startGoalSession: new StartGoalSessionUseCase(),
     deleteGoal: new DeleteGoalUseCase(),
+    completeGoalStage: new CompleteGoalStageUseCase(),
 
     // Map Integration
     linkGoalToMap: new LinkGoalToMapUseCase(),

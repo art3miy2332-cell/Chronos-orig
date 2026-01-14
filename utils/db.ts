@@ -164,8 +164,19 @@ export const DatabaseService = {
     getUserDashboardMetrics: (userId: string) => {
         const tasks = DatabaseService.tasks.getByUserId(userId);
         const pending = tasks.filter(t => t.status !== TaskStatus.DONE).length;
-        const sessions = DatabaseService.sessions.getAll().filter(s => s.userId === userId);
-        const totalFocusMinutes = sessions.reduce((acc, s) => acc + s.durationMinutes, 0);
+        
+        // Calculate the start of today in local time
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+        // Filter sessions for current user that started today
+        const sessions = DatabaseService.sessions.getAll().filter(s => 
+            s.userId === userId && s.startTs >= startOfToday
+        );
+        
+        // Sum and round focus minutes
+        const totalFocusMinutes = Math.round(sessions.reduce((acc, s) => acc + s.durationMinutes, 0));
+        
         return { pendingTasks: pending, totalFocusMinutes };
     }
 };

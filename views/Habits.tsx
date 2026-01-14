@@ -44,21 +44,21 @@ export const Habits: React.FC<HabitsProps> = ({ userId, onNavigate, labels }) =>
 
             {/* Summary */}
             <div className="p-4 grid grid-cols-2 gap-3">
-                 <div className="bg-gradient-to-br from-orange-500 to-rose-500 rounded-xl p-4 text-white shadow-lg shadow-orange-500/20">
-                    <div className="flex items-center gap-2 mb-1 opacity-90">
-                        <Flame size={16} />
-                        <span className="text-xs font-bold uppercase">{labels.longestStreak}</span>
+                 <div className="bg-gradient-to-br from-orange-500 to-rose-500 rounded-xl p-4 text-white shadow-lg shadow-orange-500/20 overflow-hidden">
+                    <div className="flex items-center gap-2 mb-1 opacity-90 min-w-0">
+                        <Flame size={16} className="shrink-0" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider truncate" title={labels.longestStreak}>{labels.longestStreak}</span>
                     </div>
-                    <div className="text-3xl font-bold">
+                    <div className="text-3xl font-bold truncate">
                         {Math.max(0, ...habits.map(h => h.streak))} <span className="text-sm font-normal opacity-80">days</span>
                     </div>
                  </div>
-                 <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-100 dark:border-slate-700 shadow-sm">
-                    <div className="flex items-center gap-2 mb-1 text-indigo-500">
-                        <Activity size={16} />
-                        <span className="text-xs font-bold uppercase">{labels.completionRate}</span>
+                 <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+                    <div className="flex items-center gap-2 mb-1 text-indigo-500 min-w-0">
+                        <Activity size={16} className="shrink-0" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider truncate" title={labels.completionRate}>{labels.completionRate}</span>
                     </div>
-                    <div className="text-3xl font-bold text-slate-900 dark:text-white">
+                    <div className="text-3xl font-bold text-slate-900 dark:text-white truncate">
                         {habits.length > 0 ? Math.round(habits.filter(h => isDoneToday(h)).length / habits.length * 100) : 0}%
                     </div>
                  </div>

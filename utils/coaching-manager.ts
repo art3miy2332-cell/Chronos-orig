@@ -44,13 +44,20 @@ export const CoachingManager = {
             }
         }
 
-        // 3. Monthly: Due if current month != month of last review
+        // 3. Monthly: Trigger ONLY at the end of a monthly plan
         const lastMonthly = user.lastMonthlyReview || 0;
-        const lastMonthDate = new Date(lastMonthly);
-        const currentDate = new Date(now);
-        if (lastMonthDate.getMonth() !== currentDate.getMonth() || lastMonthDate.getFullYear() !== currentDate.getFullYear()) {
-             // Trigger on day 1 of new month
-             pending.monthly = true;
+        const planResMonthly = PlanRepository.getLastActivePlan(user.id, PlanType.MONTHLY);
+        
+        if (planResMonthly.success && planResMonthly.data) {
+            const planEnd = planResMonthly.data.plan.periodEnd;
+            // Trigger on the last day of the plan or if the plan has already ended
+            const isPlanConcluding = now >= (planEnd - 24 * 3600000);
+            // Ensure we haven't reviewed THIS specific plan cycle yet
+            const isAlreadyReviewed = lastMonthly >= planResMonthly.data.plan.periodStart;
+
+            if (isPlanConcluding && !isAlreadyReviewed) {
+                pending.monthly = true;
+            }
         }
         
         // Priority: Monthly > Weekly > Daily (Don't spam all at once)

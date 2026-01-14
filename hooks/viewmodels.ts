@@ -804,6 +804,12 @@ export const useGoalDetailViewModel = (userId: string, goalId: string) => {
         await updateGoal({ roadmap: newRoadmap });
     };
 
+    const completeStage = async (stageId: string) => {
+        const res = await UseCases.completeGoalStage.execute(goalId, stageId);
+        if (res.success) refresh();
+        return res.success;
+    };
+
     return {
         goal,
         tasks,
@@ -822,6 +828,7 @@ export const useGoalDetailViewModel = (userId: string, goalId: string) => {
         deleteGoal,
         updateGoal,
         linkPlanToStage,
-        unlinkPlanFromStage
+        unlinkPlanFromStage,
+        completeStage
     };
 };

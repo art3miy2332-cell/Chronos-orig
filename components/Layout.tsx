@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ViewState } from '../types';
 import { LayoutDashboard, CheckSquare, Clock, MessageSquare, Settings, Activity, ListChecks, Calendar, User, Target, Menu, PanelLeftClose, Map as MapIcon } from 'lucide-react';
 
@@ -12,6 +12,33 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, labels }) => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const touchStartX = useRef<number | null>(null);
+    const SWIPE_THRESHOLD = 50; // Минимальное расстояние для срабатывания свайпа
+    const EDGE_THRESHOLD = 40;  // Зона у края экрана для открытия панели
+
+    // Обработка начала касания
+    const handleTouchStart = (e: React.TouchEvent) => {
+        touchStartX.current = e.touches[0].clientX;
+    };
+
+    // Обработка завершения касания
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        if (touchStartX.current === null) return;
+
+        const touchEndX = e.changedTouches[0].clientX;
+        const deltaX = touchEndX - touchStartX.current;
+
+        // Если панель открыта и свайп влево
+        if (isSidebarOpen && deltaX < -SWIPE_THRESHOLD) {
+            setIsSidebarOpen(false);
+        } 
+        // Если панель закрыта и свайп вправо от края экрана
+        else if (!isSidebarOpen && deltaX > SWIPE_THRESHOLD && touchStartX.current < EDGE_THRESHOLD) {
+            setIsSidebarOpen(true);
+        }
+
+        touchStartX.current = null;
+    };
     
     // Helper to check if a nav item is active
     const isActive = (viewName: string) => {
@@ -29,7 +56,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
             return false;
         }
         
-        // Complex states (objects)
         if (viewName === 'TASKS' && (currentView.type === 'TASK_EDIT' || currentView.type === 'TASK_DETAIL')) return true;
         if (viewName === 'FOCUS' && currentView.type === 'FOCUS') return true;
         if (viewName === 'HABITS' && (currentView.type === 'HABIT_EDIT' || currentView.type === 'HABIT_DETAIL')) return true;
@@ -64,7 +90,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
     };
 
     return (
-        <div className="flex h-screen max-w-4xl mx-auto relative overflow-hidden bg-transparent">
+        <div 
+            className="flex h-screen max-w-4xl mx-auto relative overflow-hidden bg-transparent"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+        >
             {/* Left Vertical Navigation Rail */}
             <aside 
                 className={`

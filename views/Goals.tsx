@@ -9,7 +9,7 @@ import { TaskMapper } from '../data/mappers';
 import { 
     Plus, Minus, Target, ArrowRight, Calendar, BarChart3, Activity, 
     CheckCircle2, Circle, AlertTriangle, ArrowLeft, Edit2, 
-    Trash2, Play, Battery, Flag, Zap, Repeat, Layout, Clock, Anchor, FileText, Link, X, Map as MapIcon, UserCircle2
+    Trash2, Play, Battery, Flag, Zap, Repeat, Layout, Clock, Anchor, FileText, Link, X, Map as MapIcon, UserCircle2, Check
 } from 'lucide-react';
 
 // --- HELPERS ---
@@ -313,7 +313,7 @@ const GoalBlueprint: React.FC<{
     const { 
         goal, tasks, report, analysis, loading, generatingReport, runningAnalysis, availablePlans,
         addStage, addTaskToStage, startSession, generateReport, runAnalysis, 
-        deleteGoal, updateGoal, refresh, linkPlanToStage, unlinkPlanFromStage
+        deleteGoal, updateGoal, refresh, linkPlanToStage, unlinkPlanFromStage, completeStage
     } = useGoalDetailViewModel(userId, goalId);
     
     // UI States
@@ -359,6 +359,12 @@ const GoalBlueprint: React.FC<{
 
         const updatedRoadmap = goal.roadmap.filter(r => r.id !== stageId);
         await updateGoal({ roadmap: updatedRoadmap });
+    };
+
+    const handleCompleteStage = async (stageId: string) => {
+        if (window.confirm("Завершить весь этап? Все связанные задачи и KPI будут отмечены как выполненные.")) {
+            await completeStage(stageId);
+        }
     };
 
     const handleInitAddTask = (stageId: string) => {
@@ -645,11 +651,20 @@ const GoalBlueprint: React.FC<{
                                     </div>
                                     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden mb-4 group">
                                         <div className="p-4 border-b border-slate-800/50 flex justify-between items-start">
-                                            <div>
-                                                <div className="font-bold text-lg text-white mb-1">{stage.title}</div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-bold text-lg text-white mb-1 truncate">{stage.title}</div>
                                                 <div className="text-xs text-slate-500">{doneCount}/{stageTasks.length} задач</div>
                                             </div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-1">
+                                                {!isDone && (
+                                                    <button 
+                                                        onClick={() => handleCompleteStage(stage.id)}
+                                                        className="text-[10px] font-bold px-2 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/30 transition-colors flex items-center gap-1"
+                                                        title="Завершить этап"
+                                                    >
+                                                        <Check size={12} /> OK
+                                                    </button>
+                                                )}
                                                 {!stage.linkedPlanId ? (
                                                     <button 
                                                         onClick={() => setLinkingStageId(stage.id)}

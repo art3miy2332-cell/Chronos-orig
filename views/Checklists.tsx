@@ -249,29 +249,35 @@ export const Checklists: React.FC<ChecklistsProps> = ({ userId, onNavigate, labe
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {/* AI & Edit CTA */}
+                {/* AI & Edit CTA - Optimized grid for potential text overflow */}
                 <div className="grid grid-cols-3 gap-2">
                     <button 
                         onClick={handleGenerateAI}
-                        className="p-3 bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/20 flex flex-col items-center gap-1 active:scale-95 transition-transform"
+                        className="p-3 bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/20 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform overflow-hidden"
                     >
-                        <Bot size={20} />
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-center leading-tight">{labels.generateAiDraft || "AI Draft"}</span>
+                        <Bot size={20} className="shrink-0" />
+                        <span className="text-[9px] font-bold uppercase tracking-tighter text-center leading-tight w-full break-words">
+                            {labels.generateAiDraft || "AI Draft"}
+                        </span>
                     </button>
                     <button 
                         onClick={handleEdit}
-                        className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl shadow-sm flex flex-col items-center gap-1 active:scale-95 transition-transform hover:border-indigo-500"
+                        className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl shadow-sm flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform hover:border-indigo-500 overflow-hidden"
                     >
-                        <Edit3 size={20} />
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-center leading-tight">{labels.builder || "Constructor"}</span>
+                        <Edit3 size={20} className="shrink-0" />
+                        <span className="text-[9px] font-bold uppercase tracking-tighter text-center leading-tight w-full break-words">
+                            {labels.builder || "Constructor"}
+                        </span>
                     </button>
                     <button 
                         onClick={handleReviewClick}
                         disabled={!plan || isReviewing}
-                        className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-xl shadow-sm flex flex-col items-center gap-1 active:scale-95 transition-transform hover:border-emerald-500 disabled:opacity-50"
+                        className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-xl shadow-sm flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform hover:border-emerald-500 disabled:opacity-50 overflow-hidden"
                     >
-                        {isReviewing ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-emerald-600 border-t-transparent" /> : <PieChart size={20} />}
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-center leading-tight">{labels.review || "Review"}</span>
+                        {isReviewing ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-emerald-600 border-t-transparent shrink-0" /> : <PieChart size={20} className="shrink-0" />}
+                        <span className="text-[9px] font-bold uppercase tracking-tighter text-center leading-tight w-full break-words">
+                            {labels.review || "Review"}
+                        </span>
                     </button>
                 </div>
 
@@ -282,7 +288,7 @@ export const Checklists: React.FC<ChecklistsProps> = ({ userId, onNavigate, labe
                      <div className="text-center py-12 opacity-50 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
                         <FileText size={48} className="mx-auto mb-3 text-slate-300" />
                         <p className="text-slate-500">Нет плана на этот период.</p>
-                        <p className="text-xs text-slate-400">Нажми "AI Draft" или "Конструктор".</p>
+                        <p className="text-xs text-slate-400">Нажми "AI Драфт" или "Конструктор".</p>
                      </div>
                 ) : structuredPlan ? (
                     // RENDER STRUCTURED PLAN PREVIEW
