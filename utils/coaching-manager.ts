@@ -1,3 +1,4 @@
+
 import { AuthService } from './auth';
 import { UserEntity, DailyInsight, WeeklyInsight, MonthlyInsight, ChatMessage, Priority, EnergyLevel, TaskStatus, PlanType } from '../types';
 import { AIContextAggregator } from './ai-context';
@@ -25,21 +26,20 @@ export const CoachingManager = {
             pending.daily = true;
         }
 
-        // 2. Weekly: Trigger if it's Sunday (Day 0) AND user has a weekly plan
+        // 2. Weekly: Trigger ONLY at the end of a weekly plan (User Request)
         const lastWeekly = user.lastWeeklyReview || 0;
-        const dayOfWeek = new Date().getDay(); // 0 = Sunday
-        const isReviewDoneToday = new Date(now).toDateString() === new Date(lastWeekly).toDateString();
+        const planResWeekly = PlanRepository.getLastActivePlan(user.id, PlanType.WEEKLY);
         
-        // Retrieve active weekly plan to see if there is something to review
-        const planRes = PlanRepository.getLastActivePlan(user.id, PlanType.WEEKLY);
-        const hasActivePlan = planRes.success && planRes.data;
+        if (planResWeekly.success && planResWeekly.data) {
+            const plan = planResWeekly.data.plan;
+            const planEnd = plan.periodEnd;
+            
+            // Trigger if the plan has ended
+            const isPlanConcluding = now >= planEnd;
+            // Ensure we haven't reviewed THIS specific plan cycle yet
+            const isAlreadyReviewed = lastWeekly >= plan.periodStart;
 
-        if (!isReviewDoneToday) {
-            if (dayOfWeek === 0 && hasActivePlan) {
-                // Sunday & Has Plan -> Trigger Weekly Review
-                pending.weekly = true;
-            } else if ((now - lastWeekly) > 7 * 86400000) {
-                // Fallback: If more than 7 days passed without review
+            if (isPlanConcluding && !isAlreadyReviewed) {
                 pending.weekly = true;
             }
         }
@@ -49,11 +49,12 @@ export const CoachingManager = {
         const planResMonthly = PlanRepository.getLastActivePlan(user.id, PlanType.MONTHLY);
         
         if (planResMonthly.success && planResMonthly.data) {
-            const planEnd = planResMonthly.data.plan.periodEnd;
+            const plan = planResMonthly.data.plan;
+            const planEnd = plan.periodEnd;
             // Trigger on the last day of the plan or if the plan has already ended
             const isPlanConcluding = now >= (planEnd - 24 * 3600000);
             // Ensure we haven't reviewed THIS specific plan cycle yet
-            const isAlreadyReviewed = lastMonthly >= planResMonthly.data.plan.periodStart;
+            const isAlreadyReviewed = lastMonthly >= plan.periodStart;
 
             if (isPlanConcluding && !isAlreadyReviewed) {
                 pending.monthly = true;
@@ -161,14 +162,13 @@ export const CoachingManager = {
         }
 
         // 3. Log to Chat (System Message)
-        // Find first available thread or default to 'main'
         const threads = ChatRepository.getThreads(userId);
         const threadId = threads.length > 0 ? threads[0].id : 'main';
 
         const chatMsg: ChatMessage = {
             id: crypto.randomUUID(),
             userId,
-            threadId, // Added missing threadId
+            threadId,
             role: 'system',
             text: `Daily Reflection Logged: Score ${insight.score}/100`,
             timestamp: Date.now()
@@ -183,15 +183,13 @@ export const CoachingManager = {
         const updatedUser = { ...user, lastWeeklyReview: Date.now() };
         AuthService.updateUser(updatedUser);
 
-        // Log to Chat (System Message)
-        // Find first available thread or default to 'main'
         const threads = ChatRepository.getThreads(userId);
         const threadId = threads.length > 0 ? threads[0].id : 'main';
 
         const chatMsg: ChatMessage = {
             id: crypto.randomUUID(),
             userId,
-            threadId, // Added missing threadId
+            threadId,
             role: 'system',
             text: `Weekly Review Logged: Focus ${Math.round(insight.kpi.completionRate*100)}%`,
             timestamp: Date.now()
@@ -206,15 +204,13 @@ export const CoachingManager = {
         const updatedUser = { ...user, lastMonthlyReview: Date.now() };
         AuthService.updateUser(updatedUser);
 
-        // Log to Chat (System Message)
-        // Find first available thread or default to 'main'
         const threads = ChatRepository.getThreads(userId);
         const threadId = threads.length > 0 ? threads[0].id : 'main';
 
         const chatMsg: ChatMessage = {
             id: crypto.randomUUID(),
             userId,
-            threadId, // Added missing threadId
+            threadId,
             role: 'system',
             text: `Monthly Strategy Logged: ${insight.strategicFocus}`,
             timestamp: Date.now()

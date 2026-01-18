@@ -1,8 +1,7 @@
 
-
 import React, { useEffect, useState, useMemo } from 'react';
 import { UserEntity, TaskEntity, TaskStatus, Priority } from '../types';
-import { Sun, Calendar, PlayCircle, Zap, MessageSquare, RefreshCw, ArrowRight, Sparkles, Moon } from 'lucide-react';
+import { Sun, Calendar, PlayCircle, Zap, MessageSquare, RefreshCw, ArrowRight, Sparkles, Moon, Layout } from 'lucide-react';
 import { DatabaseService } from '../utils/db';
 import { CoachingManager } from '../utils/coaching-manager';
 
@@ -15,14 +14,21 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ user, tasks, onNavigate, labels }) => {
     const metrics = DatabaseService.getUserDashboardMetrics(user.id);
-    const pendingTasks = tasks.filter(t => t.status !== TaskStatus.DONE);
-    const highPriorityCount = pendingTasks.filter(t => t.priority === Priority.HIGH).length;
+    
+    // FILTER: Only show non-recurring tasks OR tasks explicitly marked for dashboard
+    const pendingDashboardTasks = useMemo(() => {
+        return tasks.filter(t => 
+            t.status !== TaskStatus.DONE && 
+            (!t.recurrence || t.showOnDashboard === true)
+        );
+    }, [tasks]);
+
+    const highPriorityCount = pendingDashboardTasks.filter(t => t.priority === Priority.HIGH).length;
     
     const [greeting, setGreeting] = useState(labels.goodMorning);
     const [greetingIcon, setGreetingIcon] = useState(<Sun size={24} className="text-amber-500" fill="currentColor" />);
 
     useEffect(() => {
-        // Request geolocation access purely to satisfy permission requirements
         if ('geolocation' in navigator) {
             navigator.geolocation.getCurrentPosition(
                 (pos) => console.log('Loc access granted', pos.coords),
@@ -32,22 +38,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, tasks, onNavigate, l
 
         const updateGreeting = () => {
             const h = new Date().getHours();
-            // 06:00 - 12:00 Morning
             if (h >= 6 && h < 12) {
                 setGreeting(labels.goodMorning);
                 setGreetingIcon(<Sun size={24} className="text-amber-500" fill="currentColor" />);
             } 
-            // 12:00 - 18:00 Day
             else if (h >= 12 && h < 18) {
                 setGreeting(labels.goodAfternoon || "Good Afternoon");
                 setGreetingIcon(<Sun size={24} className="text-yellow-500" fill="currentColor" />);
             } 
-            // 18:00 - 00:00 Evening
             else if (h >= 18) {
                 setGreeting(labels.goodEvening);
                 setGreetingIcon(<Sun size={24} className="text-orange-500" fill="currentColor" />);
             } 
-            // 00:00 - 06:00 Night
             else {
                 setGreeting(labels.goodNight);
                 setGreetingIcon(<Moon size={24} className="text-indigo-400" fill="currentColor" />);
@@ -55,24 +57,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, tasks, onNavigate, l
         };
         
         updateGreeting();
-        const interval = setInterval(updateGreeting, 60000); // Check every minute
+        const interval = setInterval(updateGreeting, 60000);
         return () => clearInterval(interval);
     }, [labels]);
 
-    // --- SMART INSIGHT GENERATOR ---
     const insightMessage = useMemo(() => {
-        const count = pendingTasks.length;
-        const name = user.displayName.split(' ')[0]; // First name only
+        const count = pendingDashboardTasks.length;
+        const name = user.displayName.split(' ')[0];
         const hour = new Date().getHours();
-        const productivePhase = user.coachingProfile?.productiveHours || 'MORNING'; // MORNING, AFTERNOON, NIGHT
+        const productivePhase = user.coachingProfile?.productiveHours || 'MORNING';
         
-        // Define phases
         const isMorning = hour >= 5 && hour < 12;
         const isDay = hour >= 12 && hour < 18;
         const isEvening = hour >= 18 && hour < 23;
         const isNight = hour >= 23 || hour < 5;
 
-        // Is it the user's peak time right now?
         let isPeakTime = false;
         if (productivePhase === 'MORNING' && isMorning) isPeakTime = true;
         if (productivePhase === 'AFTERNOON' && isDay) isPeakTime = true;
@@ -80,44 +79,39 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, tasks, onNavigate, l
 
         const templates: string[] = [];
 
-        // 1. High Load Scenarios (> 5 tasks)
         if (count >= 5) {
             if (isPeakTime) {
-                templates.push(`У вас ${count} активных задач. Сейчас ваше пиковое время продуктивности. Предлагаю начать "Спринт" на 45 минут и закрыть самые сложные?`);
-                templates.push(`${name}, список внушительный (${count}), но сейчас вы в лучшей форме. Давайте закроем 3 задачи из топа за час.`);
+                templates.push(`У вас ${count} активных задач. Сейчас ваше пиковое время. Предлагаю начать "Спринт" на 45 минут?`);
+                templates.push(`${name}, список дел внушительный (${count}), но сейчас вы в лучшей форме. Давайте закроем 3 задачи из топа за час.`);
             } else if (isEvening) {
-                templates.push(`Осталось ${count} задач. Вечер — время замедляться. Выберите 1 самую важную для завершения, а остальное перенесем?`);
-                templates.push(`${count} задач на остаток дня. Чтобы не выгореть, рекомендую сделать только приоритетные, а рутину оставить на завтра.`);
+                templates.push(`Список задач содержит ${count} пунктов. Вечер — время замедляться. Выберите 1 самую важную для завершения?`);
+                templates.push(`${count} задач требуют внимания. Рекомендую сделать только приоритетные, оставив рутину календарю.`);
             } else {
-                templates.push(`В списке ${count} задач. Чтобы не распыляться, начните с одной самой "неприятной". Таймер на 25 минут поможет стартовать.`);
+                templates.push(`В вашем списке ${count} задач. Чтобы не распыляться, начните с одной самой "неприятной". Таймер на 25 минут поможет стартовать.`);
             }
         } 
-        // 2. Moderate Load Scenarios (1-4 tasks)
         else if (count > 0) {
             if (highPriorityCount > 0) {
-                templates.push(`У вас всего ${count} задач, но есть с высоким приоритетом. Разберемся с главным прямо сейчас?`);
+                templates.push(`У вас всего ${count} задач в работе, но есть критические. Разберемся с главным прямо сейчас?`);
                 templates.push(`${name}, отличный темп. Осталось закрыть ${highPriorityCount} важных пункта. Запустим фокус-блок?`);
             } else {
-                templates.push(`На сегодня ${count} небольших задач. Хороший день, чтобы поработать в спокойном ритме или уделить время обучению.`);
-                templates.push(`Список почти пуст (${count}). Есть возможность завершить всё досрочно и отдохнуть.`);
+                templates.push(`На сегодня ${count} небольших задач. Хороший день, чтобы поработать в спокойном ритме.`);
+                templates.push(`Список задач почти пуст (${count}). Есть возможность завершить всё досрочно и отдохнуть.`);
             }
         } 
-        // 3. Zero Tasks
         else {
-            templates.push("Список задач пуст! Это отличное время, чтобы спланировать стратегию на неделю или просто восстановить силы.");
-            templates.push("Чистый лист. Хотите добавить цель на завтра или почитать что-то полезное?");
+            templates.push("Список задач на сегодня пуст! Отличное время заняться стратегией или восстановить силы.");
+            templates.push("Чистый лист. Хотите добавить важную цель или просто довериться расписанию?");
         }
 
-        // Add Habit Nudge occasionally
         if (hour < 10) {
-            templates.push(`Доброе утро, ${name}. У вас ${count} задач. Начнем день с маленькой победы? Запустите таймер для первой задачи.`);
+            templates.push(`Доброе утро, ${name}. В планах ${count} задач. Начнем день с маленькой победы?`);
         }
 
-        // Deterministic randomness based on hour + count to avoid flickering, but rotate enough
         const index = (hour + count + (new Date().getDate())) % templates.length;
         return templates[index];
 
-    }, [pendingTasks.length, highPriorityCount, user.displayName, user.coachingProfile]);
+    }, [pendingDashboardTasks.length, highPriorityCount, user.displayName, user.coachingProfile]);
 
     const forceReview = async (type: 'DAILY' | 'WEEKLY' | 'MONTHLY') => {
         if (type === 'DAILY') {
@@ -134,7 +128,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, tasks, onNavigate, l
 
     return (
         <div className="p-6 space-y-6 pt-8 animate-fade-in">
-            {/* Header */}
             <div className="flex justify-between items-center mb-2">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
@@ -149,7 +142,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, tasks, onNavigate, l
                 </div>
             </div>
 
-            {/* Quick Stats Grid */}
             <div className="grid grid-cols-2 gap-4">
                 <div 
                     onClick={() => onNavigate('TASKS')}
@@ -157,11 +149,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, tasks, onNavigate, l
                 >
                     <div className="flex items-center gap-2 mb-3">
                         <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg text-indigo-500">
-                            <Calendar size={18} />
+                            <Layout size={18} />
                         </div>
-                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400 group-hover:text-indigo-500 transition-colors">{labels.pendingTasks || "Tasks"}</span>
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400 group-hover:text-indigo-500 transition-colors">ЗАДАЧИ</span>
                     </div>
-                    <div className="text-4xl font-bold text-slate-900 dark:text-white tracking-tight">{pendingTasks.length}</div>
+                    <div className="text-4xl font-bold text-slate-900 dark:text-white tracking-tight">{pendingDashboardTasks.length}</div>
                     <div className="text-xs text-slate-400 mt-1">{labels.pendingToday || "Pending today"}</div>
                 </div>
                 
@@ -177,7 +169,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, tasks, onNavigate, l
                 </div>
             </div>
 
-            {/* AI Insight Card - DYNAMIC CONTENT */}
             <div className="relative overflow-hidden rounded-3xl shadow-lg shadow-indigo-500/20 group cursor-pointer transition-transform active:scale-[0.98]">
                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 to-violet-600 opacity-100" />
                 <div className="absolute top-[-50%] left-[-50%] w-full h-full bg-white/20 blur-3xl rounded-full" />
@@ -210,7 +201,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, tasks, onNavigate, l
                 </div>
             </div>
 
-            {/* Quick Actions */}
             <div>
                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 px-1">{labels.quickStart || "Quick Actions"}</h3>
                 <div className="space-y-3">
@@ -264,7 +254,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, tasks, onNavigate, l
                 </div>
             </div>
 
-            {/* Developer Mode Tools */}
             {user.role === 'Developer' && (
                 <div className="mt-8 pt-4 border-t border-slate-200 dark:border-slate-800 opacity-50 hover:opacity-100 transition-opacity">
                     <p className="text-[10px] font-mono text-slate-400 mb-2">DEV TOOLS</p>

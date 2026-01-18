@@ -1,4 +1,3 @@
-
 import { Priority, EnergyLevel, TaskStatus, HabitFrequency, SuggestionStatus, PlanType, RecurrenceRule } from '../types';
 
 export { PlanType };
@@ -63,6 +62,10 @@ export interface Task {
     // Goal Linking
     goalId?: string | null;
     stageId?: string | null;
+
+    // UI Visibility
+    // Added showOnDashboard property to satisfy Task interface requirements in UseCases
+    showOnDashboard?: boolean;
 }
 
 export interface Session {

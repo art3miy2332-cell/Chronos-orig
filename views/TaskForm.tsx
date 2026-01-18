@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Priority, EnergyLevel, TagEntity, NotificationSettings, RecurrenceRule, RecurrenceFrequency, GoalEntity } from '../types';
 import { useTaskEditViewModel } from '../hooks/viewmodels';
-import { ArrowLeft, Battery, Calendar, Save, AlertCircle, Tag, Plus, X, Settings2, Trash2, Edit2, Check, Bell, Volume2, Repeat, Clock, ArrowRight, Target } from 'lucide-react';
+import { ArrowLeft, Battery, Calendar, Save, AlertCircle, Tag, Plus, X, Settings2, Trash2, Edit2, Check, Bell, Volume2, Repeat, Clock, ArrowRight, Target, Layout } from 'lucide-react';
 
 interface TaskFormProps {
     userId: string;
@@ -14,16 +14,7 @@ interface TaskFormProps {
 }
 
 const TAG_COLORS = [
-    '#6366f1', 
-    '#ef4444', 
-    '#f97316', 
-    '#eab308', 
-    '#22c55e', 
-    '#06b6d4', 
-    '#3b82f6', 
-    '#a855f7', 
-    '#ec4899', 
-    '#64748b', 
+    '#6366f1', '#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#a855f7', '#ec4899', '#64748b', 
 ];
 
 const RecurrenceEditor: React.FC<{
@@ -31,7 +22,6 @@ const RecurrenceEditor: React.FC<{
     onSave: (rule: RecurrenceRule | undefined) => void;
     onClose: () => void;
 }> = ({ rule, onSave, onClose }) => {
-    // FIX: Use RecurrenceFrequency enum member instead of string literal
     const [freq, setFreq] = useState<RecurrenceFrequency>(rule?.freq || RecurrenceFrequency.DAILY);
     const [interval, setInterval] = useState(rule?.interval || 1);
     const [daysOfWeek, setDaysOfWeek] = useState<number[]>(rule?.daysOfWeek || []);
@@ -40,11 +30,8 @@ const RecurrenceEditor: React.FC<{
     const [preset, setPreset] = useState<string>('CUSTOM');
 
     const toggleDay = (day: number) => {
-        if (daysOfWeek.includes(day)) {
-            setDaysOfWeek(daysOfWeek.filter(d => d !== day));
-        } else {
-            setDaysOfWeek([...daysOfWeek, day]);
-        }
+        if (daysOfWeek.includes(day)) setDaysOfWeek(daysOfWeek.filter(d => d !== day));
+        else setDaysOfWeek([...daysOfWeek, day]);
     };
 
     const handleApply = () => {
@@ -61,7 +48,6 @@ const RecurrenceEditor: React.FC<{
 
     const applyPreset = (type: string) => {
         setPreset(type);
-        // FIX: Use RecurrenceFrequency enum members instead of string literals
         if (type === 'DAILY') { setFreq(RecurrenceFrequency.DAILY); setInterval(1); }
         else if (type === 'WEEKLY') { setFreq(RecurrenceFrequency.WEEKLY); setInterval(1); setDaysOfWeek([]); }
         else if (type === 'WEEKDAYS') { setFreq(RecurrenceFrequency.WEEKLY); setInterval(1); setDaysOfWeek([1, 2, 3, 4, 5]); }
@@ -79,10 +65,11 @@ const RecurrenceEditor: React.FC<{
                 </div>
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-2">
-                        <button onClick={() => applyPreset('DAILY')} className={`py-2 px-3 rounded-lg text-xs font-bold border transition-colors ${preset === 'DAILY' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>Ежедневно</button>
-                        <button onClick={() => applyPreset('WEEKLY')} className={`py-2 px-3 rounded-lg text-xs font-bold border transition-colors ${preset === 'WEEKLY' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>Еженедельно</button>
-                        <button onClick={() => applyPreset('WEEKDAYS')} className={`py-2 px-3 rounded-lg text-xs font-bold border transition-colors ${preset === 'WEEKDAYS' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>Будни</button>
-                        <button onClick={() => applyPreset('MONTHLY')} className={`py-2 px-3 rounded-lg text-xs font-bold border transition-colors ${preset === 'MONTHLY' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>Ежемесячно</button>
+                        {['DAILY', 'WEEKLY', 'WEEKDAYS', 'MONTHLY'].map(p => (
+                             <button key={p} onClick={() => applyPreset(p)} className={`py-2 px-3 rounded-lg text-xs font-bold border transition-colors ${preset === p ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                                {p === 'DAILY' ? 'Ежедневно' : p === 'WEEKLY' ? 'Еженедельно' : p === 'WEEKDAYS' ? 'Будни' : 'Ежемесячно'}
+                             </button>
+                        ))}
                     </div>
                     <div className="border-t border-slate-100 dark:border-slate-800 my-2"></div>
                     <div onClick={() => setPreset('CUSTOM')} className={`space-y-4 ${preset !== 'CUSTOM' ? 'opacity-50' : ''}`}>
@@ -125,7 +112,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ userId, taskId, initialTitle
     const [newTagInput, setNewTagInput] = useState('');
     const [newTagColor, setNewTagColor] = useState(TAG_COLORS[0]);
     const [isTagInputOpen, setIsTagInputOpen] = useState(false);
-    const [isManagerOpen, setIsManagerOpen] = useState(false);
     const [isRecurOpen, setIsRecurOpen] = useState(false);
 
     const [scheduleDate, setScheduleDate] = useState('');
@@ -154,7 +140,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ userId, taskId, initialTitle
 
         if (newDate) {
             if (!newStart) { newStart = '09:00'; setStartTime('09:00'); }
-            if (!newEnd) { newEnd = '10:00'; setEndTime('10:00'); }
             const [h, m] = newStart.split(':').map(Number);
             const plannedAt = new Date(newDate);
             plannedAt.setHours(h, m, 0, 0);
@@ -166,9 +151,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({ userId, taskId, initialTitle
                 if (endTs.getTime() < plannedAt.getTime()) endTs.setDate(endTs.getDate() + 1);
                 duration = Math.round((endTs.getTime() - plannedAt.getTime()) / 60000);
             }
-            setTask({ ...task, plannedAt: plannedAt.getTime(), durationMinutes: duration, estimateMinutes: duration, deadline: plannedAt.getTime() + duration * 60000 });
+            setTask({ ...task, plannedAt: plannedAt.getTime(), durationMinutes: duration, estimateMinutes: duration });
         } else {
-            setTask({ ...task, plannedAt: undefined, durationMinutes: undefined, deadline: undefined });
+            setTask({ ...task, plannedAt: undefined, durationMinutes: undefined });
             setStartTime(''); setEndTime('');
         }
     };
@@ -194,6 +179,15 @@ export const TaskForm: React.FC<TaskFormProps> = ({ userId, taskId, initialTitle
         if (!newTagInput.trim()) return;
         await createNewTag(newTagInput, newTagColor);
         setNewTagInput(''); setNewTagColor(TAG_COLORS[0]); setIsTagInputOpen(false);
+    };
+
+    const handleRecurrenceChange = (rule?: RecurrenceRule) => {
+        // SMART DEFAULT: Routine tasks are hidden from dashboard unless opted in
+        setTask({ 
+            ...task, 
+            recurrence: rule, 
+            showOnDashboard: rule ? false : true 
+        });
     };
 
     const formatRecurrence = (r?: RecurrenceRule) => {
@@ -222,16 +216,60 @@ export const TaskForm: React.FC<TaskFormProps> = ({ userId, taskId, initialTitle
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
                 {error && <div className="bg-rose-50 text-rose-600 p-3 rounded-lg text-sm flex items-center gap-2"><AlertCircle size={16} /> {error}</div>}
-                <div className="space-y-2"><input autoFocus value={task.title || ''} onChange={(e) => setTask({ ...task, title: e.target.value })} placeholder={labels.taskTitle} className="w-full text-2xl font-bold bg-transparent border-b border-slate-200 dark:border-slate-800 pb-2 outline-none focus:border-indigo-500 placeholder:text-slate-300 dark:text-white transition-colors" /></div>
+                
+                <div className="space-y-2">
+                    <input autoFocus value={task.title || ''} onChange={(e) => setTask({ ...task, title: e.target.value })} placeholder={labels.taskTitle} className="w-full text-2xl font-bold bg-transparent border-b border-slate-200 dark:border-slate-800 pb-2 outline-none focus:border-indigo-500 placeholder:text-slate-300 dark:text-white transition-colors" />
+                </div>
+
                 <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2"><Target size={14} /> Цель</label><select value={task.goalId || ''} onChange={(e) => setTask({ ...task, goalId: e.target.value || null })} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium dark:text-white outline-none focus:border-indigo-500"><option value="">Без цели</option>{availableGoals.map(g => (<option key={g.id} value={g.id}>{g.title}</option>))}</select></div>
-                <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm"><div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-sm uppercase tracking-wider mb-2"><Calendar size={16} /> Дата и Время</div><div className="grid grid-cols-1 gap-4"><div className="relative"><label className="text-[10px] font-bold text-slate-400 uppercase absolute -top-2 left-2 bg-white dark:bg-slate-800 px-1">Дата</label><input type="date" value={scheduleDate} onChange={(e) => handleScheduleUpdate('date', e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-base dark:text-white outline-none focus:border-indigo-500 transition-colors" /></div><div className="flex gap-3"><div className="flex-1 relative"><label className="text-[10px] font-bold text-slate-400 uppercase absolute -top-2 left-2 bg-white dark:bg-slate-800 px-1">Начало</label><input type="time" value={startTime} onChange={(e) => handleScheduleUpdate('start', e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-base dark:text-white outline-none focus:border-indigo-500 transition-colors" /></div><div className="flex-1 relative"><label className="text-[10px] font-bold text-slate-400 uppercase absolute -top-2 left-2 bg-white dark:bg-slate-800 px-1">Конец</label><input type="time" value={endTime} onChange={(e) => handleScheduleUpdate('end', e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-base dark:text-white outline-none focus:border-indigo-500 transition-colors" /></div></div></div><div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center"><div className="text-xs text-slate-500">Длительность: <span className="font-bold text-slate-900 dark:text-white">{task.durationMinutes || 0} мин</span></div>{scheduleDate && startTime && (<div className="text-xs text-emerald-500 font-bold flex items-center gap-1"><Check size={12} /> Запланировано</div>)}</div></div>
+                
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
+                    <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-sm uppercase tracking-wider mb-2"><Calendar size={16} /> Дата и Время</div>
+                    <div className="grid grid-cols-1 gap-4">
+                        <div className="relative"><label className="text-[10px] font-bold text-slate-400 uppercase absolute -top-2 left-2 bg-white dark:bg-slate-800 px-1">Дата</label><input type="date" value={scheduleDate} onChange={(e) => handleScheduleUpdate('date', e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-base dark:text-white outline-none focus:border-indigo-500 transition-colors" /></div>
+                        <div className="flex gap-3"><div className="flex-1 relative"><label className="text-[10px] font-bold text-slate-400 uppercase absolute -top-2 left-2 bg-white dark:bg-slate-800 px-1">Начало</label><input type="time" value={startTime} onChange={(e) => handleScheduleUpdate('start', e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-base dark:text-white outline-none focus:border-indigo-500 transition-colors" /></div><div className="flex-1 relative"><label className="text-[10px] font-bold text-slate-400 uppercase absolute -top-2 left-2 bg-white dark:bg-slate-800 px-1">Конец</label><input type="time" value={endTime} onChange={(e) => handleScheduleUpdate('end', e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-base dark:text-white outline-none focus:border-indigo-500 transition-colors" /></div></div>
+                    </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{labels.priority}</label><div className="flex flex-col gap-2">{(Object.keys(Priority) as Array<keyof typeof Priority>).map((p) => (<button key={p} onClick={() => setTask({ ...task, priority: Priority[p] })} className={`px-3 py-2 rounded-lg text-sm font-medium border text-left transition-all ${task.priority === Priority[p] ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>{p}</button>))}</div></div><div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{labels.energy}</label><div className="flex flex-col gap-2">{(Object.keys(EnergyLevel) as Array<keyof typeof EnergyLevel>).map((e) => (<button key={e} onClick={() => setTask({ ...task, energyLevel: EnergyLevel[e] })} className={`px-3 py-2 rounded-lg text-sm font-medium border text-left flex items-center gap-2 transition-all ${task.energyLevel === EnergyLevel[e] ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}><Battery size={14} className={task.energyLevel === EnergyLevel[e] ? 'fill-current' : ''} />{e}</button>))}</div></div></div>
-                <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Повтор</label><button onClick={() => setIsRecurOpen(true)} className={`w-full px-4 py-3 rounded-xl border flex items-center justify-between gap-2 font-medium transition-colors ${task.recurrence ? 'bg-indigo-50 border-indigo-500 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`}><div className="flex items-center gap-2"><Repeat size={18} /><span>{formatRecurrence(task.recurrence)}</span></div><Settings2 size={16} /></button></div>
-                <div className="space-y-2"><div className="flex items-center justify-between"><label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">{labels.tags}</label><button onClick={() => setIsTagInputOpen(!isTagInputOpen)} className="text-indigo-600 hover:text-indigo-700"><Plus size={16} /></button></div>{isTagInputOpen && (<div className="mb-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 animate-in fade-in slide-in-from-top-1"><div className="flex gap-2 mb-3"><input value={newTagInput} onChange={(e) => setNewTagInput(e.target.value)} placeholder="New tag name..." className="flex-1 px-3 py-2 text-sm rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none dark:text-white" onKeyDown={(e) => e.key === 'Enter' && handleAddTag()} /><button onClick={handleAddTag} className="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm font-bold">Add</button></div><div className="flex flex-wrap gap-2">{TAG_COLORS.map(color => (<button key={color} onClick={() => setNewTagColor(color)} className={`w-6 h-6 rounded-full transition-all ${newTagColor === color ? 'ring-2 ring-offset-1 ring-indigo-500 scale-110' : 'opacity-70 hover:opacity-100'}`} style={{ backgroundColor: color }} />))}</div></div>)}<div className="flex flex-wrap gap-2">{task.tags?.map(tagName => { const tagEntity = availableTags.find(t => t.name === tagName); const color = tagEntity?.colorHex || TAG_COLORS[0]; return (<span key={tagName} className="px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1 text-white shadow-sm" style={{ backgroundColor: color }}>{tagName}<button onClick={() => toggleTag(tagName)} className="hover:text-slate-200"><X size={12} /></button></span>); })}{availableTags.filter(t => !task.tags?.includes(t.name)).map(tag => (<button key={tag.id} onClick={() => toggleTag(tag.name)} className="px-3 py-1 border text-slate-500 rounded-full text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1" style={{ borderColor: tag.colorHex || '#cbd5e1' }}><div className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.colorHex }} />{tag.name}</button>))}</div></div>
+                
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Повтор</label>
+                    <button onClick={() => setIsRecurOpen(true)} className={`w-full px-4 py-3 rounded-xl border flex items-center justify-between gap-2 font-medium transition-colors ${task.recurrence ? 'bg-indigo-50 border-indigo-500 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`}>
+                        <div className="flex items-center gap-2"><Repeat size={18} /><span>{formatRecurrence(task.recurrence)}</span></div>
+                        <Settings2 size={16} />
+                    </button>
+                </div>
+                
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between"><label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">{labels.tags}</label><button onClick={() => setIsTagInputOpen(!isTagInputOpen)} className="text-indigo-600 hover:text-indigo-700"><Plus size={16} /></button></div>
+                    {isTagInputOpen && (<div className="mb-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 animate-in fade-in slide-in-from-top-1"><div className="flex gap-2 mb-3"><input value={newTagInput} onChange={(e) => setNewTagInput(e.target.value)} placeholder="New tag name..." className="flex-1 px-3 py-2 text-sm rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none dark:text-white" onKeyDown={(e) => e.key === 'Enter' && handleAddTag()} /><button onClick={handleAddTag} className="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm font-bold">Add</button></div><div className="flex flex-wrap gap-2">{TAG_COLORS.map(color => (<button key={color} onClick={() => setNewTagColor(color)} className={`w-6 h-6 rounded-full transition-all ${newTagColor === color ? 'ring-2 ring-offset-1 ring-indigo-500 scale-110' : 'opacity-70 hover:opacity-100'}`} style={{ backgroundColor: color }} />))}</div></div>)}
+                    <div className="flex flex-wrap gap-2">{task.tags?.map(tagName => { const tagEntity = availableTags.find(t => t.name === tagName); const color = tagEntity?.colorHex || TAG_COLORS[0]; return (<span key={tagName} className="px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1 text-white shadow-sm" style={{ backgroundColor: color }}>{tagName}<button onClick={() => toggleTag(tagName)} className="hover:text-slate-200"><X size={12} /></button></span>); })}{availableTags.filter(t => !task.tags?.includes(t.name)).map(tag => (<button key={tag.id} onClick={() => toggleTag(tag.name)} className="px-3 py-1 border text-slate-500 rounded-full text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1" style={{ borderColor: tag.colorHex || '#cbd5e1' }}><div className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.colorHex }} />{tag.name}</button>))}</div>
+                </div>
+                
                 <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{labels.taskDesc}</label><textarea value={task.description || ''} onChange={(e) => setTask({ ...task, description: e.target.value })} className="w-full h-32 px-4 py-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none dark:text-white resize-none" placeholder="Add details..." /></div>
+
+                {/* VISIBILITY TOGGLE - Moved to bottom to de-emphasize focus */}
+                <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg transition-colors ${task.showOnDashboard ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>
+                            <Layout size={18} />
+                        </div>
+                        <div>
+                            <div className="font-bold text-xs dark:text-white">На главном экране</div>
+                            <div className="text-[9px] text-slate-500">Показывать в списке задач на сегодня</div>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => setTask({...task, showOnDashboard: !task.showOnDashboard})}
+                        className={`w-10 h-5 rounded-full transition-colors relative ${task.showOnDashboard ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                    >
+                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${task.showOnDashboard ? 'translate-x-5' : ''}`} />
+                    </button>
+                </div>
             </div>
             <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 pb-safe"><button onClick={handleSave} disabled={saving} className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-indigo-500/30 active:scale-95 transition-transform flex items-center justify-center gap-2 disabled:opacity-50"><Save size={20} />{labels.saveTaskBtn}</button></div>
-            {isRecurOpen && <RecurrenceEditor rule={task.recurrence} onSave={(r) => setTask({...task, recurrence: r})} onClose={() => setIsRecurOpen(false)} />}
+            {isRecurOpen && <RecurrenceEditor rule={task.recurrence} onSave={handleRecurrenceChange} onClose={() => setIsRecurOpen(false)} />}
         </div>
     );
 };

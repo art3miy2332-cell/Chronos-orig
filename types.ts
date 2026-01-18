@@ -182,6 +182,7 @@ export interface TaskEntity {
     parentTaskId?: string;
     goalId?: string | null;
     stageId?: string | null;
+    showOnDashboard?: boolean;
 }
 
 export interface HabitEntity {
@@ -303,6 +304,8 @@ export interface GoalKPI {
 export interface RoadmapNode {
     id: string;
     title: string;
+    description?: string;
+    deadline?: number;
     completed: boolean;
     linkedPlanId?: string;
 }

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
     TaskEntity, TagEntity, Priority, EnergyLevel, TaskStatus, RecurrenceRule, 
@@ -83,12 +82,11 @@ export const useTasksViewModel = (userId: string) => {
     const toggleTask = async (id: string) => {
         const task = tasks.find(t => t.id === id);
         if (task) {
-            // Optimistic update
             const updated = { ...task, status: task.status === TaskStatus.DONE ? TaskStatus.TODO : TaskStatus.DONE };
             setTasks(tasks.map(t => t.id === id ? updated : t));
             
             const res = await UseCases.toggleTask.execute(id);
-            if (!res.success) refresh(); // Revert on fail
+            if (!res.success) refresh();
         }
     };
 
@@ -96,7 +94,7 @@ export const useTasksViewModel = (userId: string) => {
         const task = tasks.find(t => t.id === id);
         if (task) {
             setUndoState({ type: 'DELETE', task });
-            setTasks(tasks.filter(t => t.id !== id)); // Optimistic
+            setTasks(tasks.filter(t => t.id !== id));
             await UseCases.deleteTask.execute(id);
             setTimeout(() => setUndoState(null), 5000);
         }
@@ -107,7 +105,6 @@ export const useTasksViewModel = (userId: string) => {
             if (undoState.type === 'DELETE') {
                 await UseCases.restoreTask.execute(TaskMapper.toDomain(undoState.task));
             }
-            // UPDATE undo logic would be similar
             setUndoState(null);
             refresh();
         }
@@ -161,7 +158,8 @@ export const useTaskEditViewModel = (userId: string, taskId?: string, initialTit
         estimateMinutes: 60,
         tags: [],
         plannedAt: initialPlannedAt,
-        durationMinutes: 60
+        durationMinutes: 60,
+        showOnDashboard: true
     });
     const [availableTags, setAvailableTags] = useState<TagEntity[]>([]);
     const [availableGoals, setAvailableGoals] = useState<GoalEntity[]>([]);
@@ -170,7 +168,6 @@ export const useTaskEditViewModel = (userId: string, taskId?: string, initialTit
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // Load Tags & Goals
         const tagsRes = TagRepository.getAllTags();
         if (tagsRes.success) setAvailableTags(tagsRes.data);
         const goals = GoalRepository.getAll(userId);
@@ -221,7 +218,9 @@ export const useTaskEditViewModel = (userId: string, taskId?: string, initialTit
                 task.recurrence,
                 task.plannedAt,
                 task.durationMinutes,
-                task.goalId || undefined
+                task.goalId || undefined,
+                undefined,
+                task.showOnDashboard
             );
         }
         setSaving(false);
@@ -299,16 +298,13 @@ export const useHabitsViewModel = (userId: string) => {
     const markDone = async (id: string) => {
         const habit = habits.find(h => h.id === id);
         if (habit) {
-            // Optimistic
             const now = Date.now();
             const updated = { ...habit, lastDoneAt: now, streak: habit.streak + 1, history: [...habit.history, now] };
             setHabits(habits.map(h => h.id === id ? updated : h));
             
-            // Persist
             const domHabit = HabitMapper.toDomain(updated);
             await HabitRepository.updateHabit(domHabit);
             
-            // Goal sync
             if (habit.goalId) await UseCases.recalcGoalProgress.execute(habit.goalId);
         }
     };
@@ -338,6 +334,7 @@ export const useHabitEditViewModel = (userId: string, habitId?: string) => {
         if (habitId) {
             setLoading(true);
             const res = HabitRepository.getHabitById(habitId);
+            // Fixed: setHabit instead of setTask
             if (res.success) setHabit(res.data);
             setLoading(false);
         }
@@ -404,8 +401,6 @@ export const useHabitDetailViewModel = (habitId: string) => {
             ...habit, 
             repairTokensRemaining: habit.repairTokensRemaining - 1,
             history: [...habit.history, date].sort() 
-            // Note: streak recalculation logic is complex, skipping for brevity in VM, 
-            // should be in Domain Logic or recalculated from history
         };
         setHabit(updated);
         await HabitRepository.updateHabit(HabitMapper.toDomain(updated));
@@ -426,15 +421,7 @@ export const useFocusViewModel = (userId?: string, taskId?: string) => {
 
     useEffect(() => {
         if (userId) BackgroundTimer.setUserId(userId);
-        
-        // Subscribe to background timer
         const unsub = BackgroundTimer.subscribe((s) => setState(s));
-        
-        // If mounting with specific taskId and timer is IDLE, prep it
-        if (taskId && state.status === 'IDLE') {
-            // Logic handled inside Start usually, but we can set metadata
-        }
-
         return () => unsub();
     }, [userId, taskId]);
 
@@ -471,14 +458,10 @@ export const useAIChatViewModel = (userId: string) => {
 
     useEffect(() => {
         let t = ChatRepository.getThreads(userId);
-        
-        // AUTO-CREATE FIRST THREAD IF NONE EXIST (Onboarding)
-        // This ensures the AIChat view has a thread to attach the welcome message to immediately
         if (t.length === 0) {
             const initialThread = ChatRepository.createThread(userId, 'Start');
             t = [initialThread];
         }
-
         setThreads(t);
         if (t.length > 0) {
             selectThread(t[0].id);
@@ -524,7 +507,6 @@ export const useAIChatViewModel = (userId: string) => {
             threadId = t.id;
         }
 
-        // Handle scenario injection without displaying it to user in a weird way
         const effectiveText = scenario && text.startsWith(scenario) ? text : (scenario ? `${scenario}:::${text}` : text);
 
         const userMsg: ChatMessage = {
@@ -536,29 +518,22 @@ export const useAIChatViewModel = (userId: string) => {
             timestamp: Date.now()
         };
 
-        // UI Optimistic
         const newHistory = [...state.messages, userMsg];
         setState({ messages: newHistory, isLoading: true });
         
         ChatRepository.addMessage(userId, userMsg);
-
-        // Gather Context
         const context = AIContextAggregator.gatherContext(userId, 'ALL');
         
-        // Call AI using Simulator which connects to Google GenAI
         try {
             const aiResponse = await AISimulator.generateResponse(effectiveText, context, newHistory);
-            
             const botMsg: ChatMessage = {
                 id: crypto.randomUUID(),
                 userId,
                 threadId: threadId!,
                 role: 'model',
                 text: aiResponse.text,
-                timestamp: Date.now(),
-                suggestionId: undefined // Could handle payload if needed
+                timestamp: Date.now()
             };
-            
             ChatRepository.addMessage(userId, botMsg);
             setState(prev => ({ messages: [...prev.messages, botMsg], isLoading: false }));
         } catch (error) {
@@ -567,7 +542,7 @@ export const useAIChatViewModel = (userId: string) => {
                 userId,
                 threadId: threadId!,
                 role: 'system',
-                text: "Ошибка соединения с AI. Проверьте API Key.",
+                text: "Ошибка соединения с AI.",
                 timestamp: Date.now()
             };
             ChatRepository.addMessage(userId, errorMsg);
@@ -593,7 +568,6 @@ export const useAIChatViewModel = (userId: string) => {
 export const useChecklistViewModel = (userId: string) => {
     const [planType, setPlanType] = useState<PlanType>(PlanType.WEEKLY);
     const [periodStart, setPeriodStart] = useState<number>(() => {
-        // Default to start of current week/month
         const now = new Date();
         now.setHours(0,0,0,0);
         const day = now.getDay();
@@ -641,65 +615,36 @@ export const useChecklistViewModel = (userId: string) => {
 
     const generateBasicReview = async () => {
         if (!plan) return null;
-        
-        // Gather real context
         const range = planType === PlanType.WEEKLY ? 'WEEK' : 'MONTH';
         const context = AIContextAggregator.gatherContext(userId, range);
-        
-        // Enrich context with specific plan data
-        const planContext = {
-            ...context,
-            currentPlanTitle: plan.title,
-            planStructure: plan.structureJson ? JSON.parse(plan.structureJson) : null
-        };
-
+        const planContext = { ...context, currentPlanTitle: plan.title, planStructure: plan.structureJson ? JSON.parse(plan.structureJson) : null };
         const prompt = `GENERATE_PLAN_REVIEW for ${planType}`;
         const response = await AISimulator.generateResponse(prompt, planContext);
-        
-        try {
-            return JSON.parse(response.suggestionPayload || '{}');
-        } catch (e) {
-            console.error("Failed to parse review", e);
-            return null;
-        }
+        try { return JSON.parse(response.suggestionPayload || '{}'); } catch (e) { return null; }
     };
 
     return {
         plan, entries, loading, periodStart, planType,
-        setPlanType,
-        nextPeriod, prevPeriod,
-        savePlan,
-        generateBasicReview
+        setPlanType, nextPeriod, prevPeriod, savePlan, generateBasicReview
     };
 };
 
 export const useAIDraftViewModel = (userId: string) => {
     const [suggestions, setSuggestions] = useState<SuggestionEntity[]>([]);
     const [loading, setLoading] = useState(false);
-
     const fetchDrafts = async (start: number, type: PlanType) => {
         setLoading(true);
-        // Simulate AI call
         setTimeout(() => {
-            setSuggestions([
-                {
-                    id: 's1', userId, context: 'Analysis', text: 'Suggested Focus: Deep Work', explanation: 'You had fragmented time last week.',
-                    confidence: 0.9, estimateMinutes: 0, tags: ['Strategy'], status: SuggestionStatus.PROPOSED, createdAt: Date.now(), type: 'PLAN_FOCUS'
-                }
-            ]);
+            setSuggestions([{ id: 's1', userId, context: 'Analysis', text: 'Focus: Deep Work', explanation: 'Fragmented time.', confidence: 0.9, estimateMinutes: 0, tags: ['Strategy'], status: SuggestionStatus.PROPOSED, createdAt: Date.now(), type: 'PLAN_FOCUS' }]);
             setLoading(false);
         }, 1000);
     };
-
     const acceptSuggestion = async (id: string, action: string, targetId?: string) => {
-        // Mock accept
         setSuggestions(prev => prev.filter(s => s.id !== id));
     };
-
     const rejectSuggestion = async (id: string) => {
         setSuggestions(prev => prev.filter(s => s.id !== id));
     };
-
     return { suggestions, loading, fetchDrafts, acceptSuggestion, rejectSuggestion };
 };
 
@@ -719,22 +664,13 @@ export const useGoalDetailViewModel = (userId: string, goalId: string) => {
         const g = GoalRepository.getById(goalId);
         if (g) setGoal(g);
         const tRes = TaskRepository.getTasksForUser(userId);
-        if (tRes.success) {
-            setTasks(tRes.data.filter(t => t.goalId === goalId));
-        }
-        
-        // Load plans
+        if (tRes.success) setTasks(tRes.data.filter(t => t.goalId === goalId));
         const pRes = PlanRepository.getAllPlans(userId);
-        if (pRes.success) {
-            setAvailablePlans(pRes.data);
-        }
-
+        if (pRes.success) setAvailablePlans(pRes.data);
         setLoading(false);
     }, [goalId, userId]);
 
-    useEffect(() => {
-        refresh();
-    }, [refresh]);
+    useEffect(() => { refresh(); }, [refresh]);
 
     const addStage = async (title: string) => {
         const res = await UseCases.addStageToGoal.execute(goalId, title);
@@ -742,24 +678,8 @@ export const useGoalDetailViewModel = (userId: string, goalId: string) => {
     };
 
     const addTaskToStage = async (stageId: string, title: string) => {
-        const res = await UseCases.createTask.execute(
-            userId, 
-            title, 
-            Priority.MEDIUM, 
-            EnergyLevel.MEDIUM, 
-            30, 
-            undefined, 
-            [], 
-            undefined, 
-            undefined, 
-            undefined, 
-            goalId, 
-            stageId
-        );
-        if (res.success) {
-            await UseCases.recalcGoalProgress.execute(goalId);
-            refresh();
-        }
+        const res = await UseCases.createTask.execute(userId, title, Priority.MEDIUM, EnergyLevel.MEDIUM, 30, undefined, [], undefined, undefined, undefined, goalId, stageId);
+        if (res.success) { await UseCases.recalcGoalProgress.execute(goalId); refresh(); }
     };
 
     const startSession = async () => {
@@ -781,54 +701,11 @@ export const useGoalDetailViewModel = (userId: string, goalId: string) => {
         setRunningAnalysis(false);
     };
 
-    const deleteGoal = async () => {
-        await UseCases.deleteGoal.execute(goalId);
-    };
+    const deleteGoal = async () => { await UseCases.deleteGoal.execute(goalId); };
+    const updateGoal = async (updates: Partial<GoalEntity>) => { if (!goal) return; const updated = { ...goal, ...updates }; await UseCases.updateGoal.execute(updated as GoalEntity); refresh(); };
+    const linkPlanToStage = async (stageId: string, planId: string) => { if (!goal) return; const newRoadmap = goal.roadmap.map(r => r.id === stageId ? { ...r, linkedPlanId: planId } : r); await updateGoal({ roadmap: newRoadmap }); };
+    const unlinkPlanFromStage = async (stageId: string) => { if (!goal) return; const newRoadmap = goal.roadmap.map(r => r.id === stageId ? { ...r, linkedPlanId: undefined } : r); await updateGoal({ roadmap: newRoadmap }); };
+    const completeStage = async (stageId: string) => { const res = await UseCases.completeGoalStage.execute(goalId, stageId); if (res.success) refresh(); return res.success; };
 
-    const updateGoal = async (updates: Partial<GoalEntity>) => {
-        if (!goal) return;
-        const updated = { ...goal, ...updates };
-        await UseCases.updateGoal.execute(updated as GoalEntity);
-        refresh();
-    };
-
-    const linkPlanToStage = async (stageId: string, planId: string) => {
-        if (!goal) return;
-        const newRoadmap = goal.roadmap.map(r => r.id === stageId ? { ...r, linkedPlanId: planId } : r);
-        await updateGoal({ roadmap: newRoadmap });
-    };
-
-    const unlinkPlanFromStage = async (stageId: string) => {
-        if (!goal) return;
-        const newRoadmap = goal.roadmap.map(r => r.id === stageId ? { ...r, linkedPlanId: undefined } : r);
-        await updateGoal({ roadmap: newRoadmap });
-    };
-
-    const completeStage = async (stageId: string) => {
-        const res = await UseCases.completeGoalStage.execute(goalId, stageId);
-        if (res.success) refresh();
-        return res.success;
-    };
-
-    return {
-        goal,
-        tasks,
-        report,
-        analysis,
-        loading,
-        generatingReport,
-        runningAnalysis,
-        availablePlans,
-        refresh,
-        addStage,
-        addTaskToStage,
-        startSession,
-        generateReport,
-        runAnalysis,
-        deleteGoal,
-        updateGoal,
-        linkPlanToStage,
-        unlinkPlanFromStage,
-        completeStage
-    };
+    return { goal, tasks, report, analysis, loading, generatingReport, runningAnalysis, availablePlans, refresh, addStage, addTaskToStage, startSession, generateReport, runAnalysis, deleteGoal, updateGoal, linkPlanToStage, unlinkPlanFromStage, completeStage };
 };
