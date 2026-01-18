@@ -18,8 +18,8 @@ const DEFAULT_ROW_HEIGHT = 64;
 const MIN_ROW_HEIGHT = 36;
 const MAX_ROW_HEIGHT = 180;
 const HEADER_HEIGHT_PX = 48;
-const LONG_PRESS_DELAY = 400; // ms to trigger drag
-const MOVE_CANCEL_THRESHOLD = 10; // px to cancel hold if finger moves too much
+const LONG_PRESS_DELAY = 400; // задержка перед началом перетаскивания (мс)
+const MOVE_CANCEL_THRESHOLD = 10; // порог движения для отмены захвата (px)
 
 const getZoned = (ts: number, timezone: string) => DateUtils.getZonedParts(ts, timezone);
 
@@ -210,6 +210,7 @@ const TimeGrid: React.FC<{
     // Long press logic
     const holdTimerRef = useRef<any>(null);
     const holdStartPosRef = useRef<{ x: number, y: number } | null>(null);
+    const downedTaskRef = useRef<TaskEntity | null>(null);
 
     const [activeInteraction, setActiveInteraction] = useState<{
         type: 'MOVE' | 'RESIZE';
@@ -223,7 +224,9 @@ const TimeGrid: React.FC<{
     } | null>(null);
 
     const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-        setScrollTop(e.currentTarget.scrollTop);
+        if (!activeInteraction) {
+            setScrollTop(e.currentTarget.scrollTop);
+        }
     };
 
     // Auto-scroll to morning on load
@@ -329,9 +332,10 @@ const TimeGrid: React.FC<{
     };
 
     const onPointerDown = (e: React.PointerEvent, task: TaskEntity, type: 'MOVE' | 'RESIZE') => {
+        if (e.button !== 0) return; // Только левая кнопка / основной палец
         e.stopPropagation();
         
-        // Resize handle remains immediate for precision
+        // Изменение размера остается мгновенным для точности
         if (type === 'RESIZE') {
             const interaction = {
                 type,
@@ -349,16 +353,18 @@ const TimeGrid: React.FC<{
             return;
         }
 
-        // Move logic requires long press (hold) to prevent scrolling interference
+        // Логика перемещения требует удержания (Long Press) для предотвращения конфликтов со скроллом
         holdStartPosRef.current = { x: e.clientX, y: e.clientY };
+        downedTaskRef.current = task;
         
         const pointerId = e.pointerId;
         const pointerX = e.clientX;
         const pointerY = e.clientY;
+        const target = e.currentTarget as HTMLElement; // FIX: Capture target now, e.currentTarget will be null later in setTimeout
 
         holdTimerRef.current = setTimeout(() => {
             if (window.navigator && window.navigator.vibrate) {
-                window.navigator.vibrate(40);
+                window.navigator.vibrate(50);
             }
 
             const interaction = {
@@ -372,15 +378,16 @@ const TimeGrid: React.FC<{
                 currentX: pointerX
             };
 
-            const target = e.currentTarget as HTMLElement;
-            target.setPointerCapture(pointerId);
+            if (target) {
+                target.setPointerCapture(pointerId);
+            }
             setActiveInteraction(interaction);
             holdTimerRef.current = null;
         }, LONG_PRESS_DELAY);
     };
 
     const onPointerMove = (e: React.PointerEvent) => {
-        // If we are waiting for a hold and the finger moves too much, cancel the hold
+        // Если мы ждем удержания и указатель сместился слишком сильно, отменяем захват
         if (holdTimerRef.current && holdStartPosRef.current) {
             const dx = Math.abs(e.clientX - holdStartPosRef.current.x);
             const dy = Math.abs(e.clientY - holdStartPosRef.current.y);
@@ -388,6 +395,7 @@ const TimeGrid: React.FC<{
                 clearTimeout(holdTimerRef.current);
                 holdTimerRef.current = null;
                 holdStartPosRef.current = null;
+                downedTaskRef.current = null;
             }
         }
 
@@ -397,27 +405,29 @@ const TimeGrid: React.FC<{
     };
 
     const onPointerUp = (e: React.PointerEvent) => {
-        // Clean up hold timer
+        // Очистка таймера удержания
         if (holdTimerRef.current) {
             clearTimeout(holdTimerRef.current);
             holdTimerRef.current = null;
             
-            // If it was a quick release without movement, it's a click/tap
+            // Если это был быстрый отпуск без сильного движения - это клик
             if (holdStartPosRef.current) {
                 const dx = Math.abs(e.clientX - holdStartPosRef.current.x);
                 const dy = Math.abs(e.clientY - holdStartPosRef.current.y);
                 if (dx < MOVE_CANCEL_THRESHOLD && dy < MOVE_CANCEL_THRESHOLD) {
-                     // Get current target task ID from attributes or local scope
-                     // Simple approach: if we reach here, we're on the element that started the pointer down
-                     // We can't easily get the task ID here without passing it or using a ref, 
-                     // but the event target is the element.
-                     // Since onPointerUp is on the grid or task, we rely on standard navigation logic.
+                     const taskToNavigate = activeInteraction?.task || downedTaskRef.current;
+                     if (taskToNavigate) {
+                        onNavigate({ type: 'TASK_DETAIL', taskId: taskToNavigate.id.split('_')[0] });
+                     }
                 }
             }
             holdStartPosRef.current = null;
         }
 
-        if (!activeInteraction) return;
+        if (!activeInteraction) {
+            downedTaskRef.current = null;
+            return;
+        }
         e.stopPropagation();
 
         const { type, task, initialY, initialX, initialTime, initialDuration, currentY, currentX } = activeInteraction;
@@ -425,7 +435,7 @@ const TimeGrid: React.FC<{
         const deltaX = currentX - initialX;
         const dist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
         
-        // If moved very little, navigate to detail
+        // Если смещение минимально, трактуем как навигацию
         if (dist < 8) {
             onNavigate({ type: 'TASK_DETAIL', taskId: task.id.split('_')[0] });
         } else {
@@ -455,6 +465,7 @@ const TimeGrid: React.FC<{
         }
         
         setActiveInteraction(null);
+        downedTaskRef.current = null;
         if (e.currentTarget.hasPointerCapture(e.pointerId)) {
             e.currentTarget.releasePointerCapture(e.pointerId);
         }
@@ -567,7 +578,7 @@ const TimeGrid: React.FC<{
                                         const tagEntity = taskTag ? tags.find(t => t.name === taskTag) : null;
                                         const tagColor = tagEntity?.colorHex;
 
-                                        let blockClass = `absolute left-0.5 right-0.5 rounded sm:p-1 p-0.5 text-[8px] sm:text-[10px] font-medium overflow-hidden border transition-all z-10 hover:z-20 shadow-sm touch-pan-y ${isBeingInteracted ? 'shadow-xl scale-[1.05] opacity-90 z-50 ring-2 ring-indigo-500/50 cursor-grabbing duration-0' : 'cursor-default'} `;
+                                        let blockClass = `absolute left-0.5 right-0.5 rounded sm:p-1 p-0.5 text-[8px] sm:text-[10px] font-medium overflow-hidden border transition-all z-10 hover:z-20 shadow-sm touch-pan-y ${isBeingInteracted ? 'shadow-xl scale-[1.05] opacity-90 z-50 ring-2 ring-indigo-500/50 cursor-grabbing duration-0' : 'cursor-pointer'} `;
                                         blockClass += getEventColorClasses(task.priority, isDone, !!tagColor);
                                         
                                         const inlineStyle: React.CSSProperties = { top: `${top}px`, height: `${Math.max(18, height)}px` };
