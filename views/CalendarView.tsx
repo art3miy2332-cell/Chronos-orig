@@ -405,6 +405,10 @@ const TimeGrid: React.FC<{
 
         if (!activeInteraction) return;
         e.stopPropagation();
+        
+        // Предотвращаем дефолтное поведение (скролл) при активном перетаскивании
+        if (e.cancelable) e.preventDefault();
+        
         setActiveInteraction(prev => prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null);
     };
 
@@ -504,7 +508,8 @@ const TimeGrid: React.FC<{
             <div 
                 ref={containerRef} 
                 onScroll={handleScroll} 
-                className={`flex-1 overflow-y-auto overflow-x-hidden bg-white dark:bg-slate-900 relative h-full transition-transform duration-75 ease-out touch-pan-y overscroll-behavior-y-contain no-scrollbar sm:scrollbar-default ${activeInteraction ? 'touch-none' : ''}`}
+                className={`flex-1 bg-white dark:bg-slate-900 relative h-full transition-transform duration-75 ease-out overscroll-behavior-y-contain no-scrollbar sm:scrollbar-default 
+                    ${activeInteraction ? 'overflow-hidden touch-none' : 'overflow-y-auto overflow-x-hidden touch-pan-y'}`}
                 style={{ transform: swipeOffset ? `translateX(${swipeOffset * 0.3}px)` : 'none' }}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
