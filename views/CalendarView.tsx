@@ -289,7 +289,11 @@ const TimeGrid: React.FC<{
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
-        if (activeInteraction) return;
+        // Если мы перетаскиваем задачу, полностью блокируем свайпы календаря
+        if (activeInteraction) {
+            if (e.cancelable) e.preventDefault();
+            return;
+        }
 
         if (e.touches.length === 2 && initialPinchDist.current !== null) {
             const currentDist = Math.hypot(
@@ -360,7 +364,7 @@ const TimeGrid: React.FC<{
         const pointerId = e.pointerId;
         const pointerX = e.clientX;
         const pointerY = e.clientY;
-        const target = e.currentTarget as HTMLElement; // FIX: Capture target now, e.currentTarget will be null later in setTimeout
+        const target = e.currentTarget as HTMLElement;
 
         holdTimerRef.current = setTimeout(() => {
             if (window.navigator && window.navigator.vibrate) {
@@ -500,7 +504,7 @@ const TimeGrid: React.FC<{
             <div 
                 ref={containerRef} 
                 onScroll={handleScroll} 
-                className="flex-1 overflow-y-auto overflow-x-hidden bg-white dark:bg-slate-900 relative h-full transition-transform duration-75 ease-out touch-pan-y overscroll-behavior-y-contain no-scrollbar sm:scrollbar-default"
+                className={`flex-1 overflow-y-auto overflow-x-hidden bg-white dark:bg-slate-900 relative h-full transition-transform duration-75 ease-out touch-pan-y overscroll-behavior-y-contain no-scrollbar sm:scrollbar-default ${activeInteraction ? 'touch-none' : ''}`}
                 style={{ transform: swipeOffset ? `translateX(${swipeOffset * 0.3}px)` : 'none' }}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}

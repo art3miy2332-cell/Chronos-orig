@@ -586,9 +586,9 @@ export interface Diagnostics {
 
 export type ViewState = 
     | 'DASHBOARD' | 'LIFE_MAP' | 'CALENDAR' | 'TASKS' | 'TASK_CREATE' | 'FOCUS' | 'AI_CHAT' | 'HABITS' | 'HABIT_CREATE' | 'CHECKLISTS' | 'GOALS' | 'SUGGESTION_LOG' | 'SETTINGS' | 'DEV' | 'AUTH_LOGIN' | 'AUTH_REGISTER' | 'ONBOARDING'
-    | { type: 'TASK_EDIT', taskId?: string, initialTitle?: string }
+    | { type: 'TASK_EDIT', taskId?: string, initialTitle?: string, returnToGoalId?: string }
     | { type: 'TASK_CREATE', initialPlannedAt?: number }
-    | { type: 'TASK_DETAIL', taskId: string }
+    | { type: 'TASK_DETAIL', taskId: string, returnToGoalId?: string }
     | { type: 'FOCUS', taskId?: string }
     | { type: 'HABIT_EDIT', habitId?: string }
     | { type: 'HABIT_DETAIL', habitId: string }
@@ -598,4 +598,5 @@ export type ViewState =
     | { type: 'DAILY_REFLECTION', insight: DailyInsight }
     | { type: 'WEEKLY_REVIEW', insight: WeeklyInsight }
     | { type: 'MONTHLY_REVIEW', insight: MonthlyInsight }
-    | { type: 'LIFE_MAP', focusGoalId?: string };
+    | { type: 'LIFE_MAP', focusGoalId?: string }
+    | { type: 'GOAL_DETAIL', goalId: string };

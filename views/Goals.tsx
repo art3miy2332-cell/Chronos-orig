@@ -313,7 +313,7 @@ const PlanPickerModal: React.FC<{ plans: Plan[], onPick: (planId: string) => voi
 
 // --- GOAL DETAIL VIEW ---
 
-const GoalBlueprint: React.FC<{
+export const GoalBlueprint: React.FC<{
     goalId: string;
     userId: string;
     onBack: () => void;
@@ -342,10 +342,94 @@ const GoalBlueprint: React.FC<{
     const [addingTaskToStageId, setAddingTaskToStageId] = useState<string | null>(null);
     const [newTaskTitle, setNewTaskTitle] = useState('');
 
-    // Reordering State
+    // --- DRAG & DROP REORDER LOGIC ---
     const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
     const [dropOverTaskId, setDropOverTaskId] = useState<string | null>(null);
     const longPressTimer = useRef<any>(null);
+    const touchStartPos = useRef<{ x: number, y: number } | null>(null);
+
+    const handleTaskPointerDown = (e: React.PointerEvent, taskId: string) => {
+        if (e.button !== 0) return;
+        if (longPressTimer.current) clearTimeout(longPressTimer.current);
+        
+        const pointerX = e.clientX;
+        const pointerY = e.clientY;
+        const pointerId = e.pointerId;
+        const target = e.currentTarget as HTMLElement;
+        touchStartPos.current = { x: pointerX, y: pointerY };
+
+        longPressTimer.current = setTimeout(() => {
+            setDraggingTaskId(taskId);
+            if (window.navigator.vibrate) window.navigator.vibrate(50);
+            
+            // CRITICAL: Must use captured 'target' and 'pointerId' here
+            if (target && typeof target.setPointerCapture === 'function') {
+                try {
+                    target.setPointerCapture(pointerId);
+                } catch (err) {
+                    console.warn("Could not set pointer capture", err);
+                }
+            }
+        }, 500); 
+    };
+
+    const handleTaskPointerMove = (e: React.PointerEvent) => {
+        if (longPressTimer.current && touchStartPos.current && !draggingTaskId) {
+            const dist = Math.sqrt(
+                Math.pow(e.clientX - touchStartPos.current.x, 2) + 
+                Math.pow(e.clientY - touchStartPos.current.y, 2)
+            );
+            if (dist > 15) {
+                clearTimeout(longPressTimer.current);
+                longPressTimer.current = null;
+            }
+        }
+
+        if (!draggingTaskId) return;
+
+        const element = document.elementFromPoint(e.clientX, e.clientY);
+        const targetTaskEl = element?.closest('[data-task-id]');
+        if (targetTaskEl) {
+            const overId = targetTaskEl.getAttribute('data-task-id');
+            if (overId && overId !== draggingTaskId) {
+                setDropOverTaskId(overId);
+            }
+        } else {
+            setDropOverTaskId(null);
+        }
+    };
+
+    const handleTaskPointerUp = async (e: React.PointerEvent) => {
+        if (longPressTimer.current) clearTimeout(longPressTimer.current);
+        
+        if (draggingTaskId && goal) {
+            if (dropOverTaskId && draggingTaskId !== dropOverTaskId) {
+                const newLinkedIds = [...goal.linkedTasksIds];
+                const dragIdx = newLinkedIds.indexOf(draggingTaskId);
+                const dropIdx = newLinkedIds.indexOf(dropOverTaskId);
+
+                if (dragIdx !== -1 && dropIdx !== -1) {
+                    newLinkedIds.splice(dragIdx, 1);
+                    newLinkedIds.splice(dropIdx, 0, draggingTaskId);
+                    await updateGoal({ linkedTasksIds: newLinkedIds });
+                }
+            }
+            
+            if (e.currentTarget instanceof HTMLElement && e.currentTarget.hasPointerCapture(e.pointerId)) {
+                try {
+                    e.currentTarget.releasePointerCapture(e.pointerId);
+                } catch (err) {
+                    // Ignore errors on release
+                }
+            }
+        }
+
+        setDraggingTaskId(null);
+        setDropOverTaskId(null);
+        touchStartPos.current = null;
+    };
+
+    // --- OTHER LOGIC ---
 
     const handleAddStage = async () => { if (!newStageTitle.trim()) return; await addStage(newStageTitle); setNewStageTitle(''); setIsAddStageOpen(false); };
 
@@ -364,53 +448,6 @@ const GoalBlueprint: React.FC<{
         const updatedRoadmap = goal.roadmap.map(r => r.id === stageId ? { ...r, ...updates } : r);
         await updateGoal({ roadmap: updatedRoadmap });
         setActiveEditingStageId(null);
-    };
-
-    const handleTaskPointerDown = (e: React.PointerEvent, taskId: string) => {
-        // Start long-press detection
-        if (longPressTimer.current) clearTimeout(longPressTimer.current);
-        
-        // Right click (button 2) starts drag immediately
-        if (e.button === 2) {
-            e.preventDefault();
-            startDragging(taskId);
-            return;
-        }
-
-        longPressTimer.current = setTimeout(() => {
-            startDragging(taskId);
-            if (window.navigator.vibrate) window.navigator.vibrate(50);
-        }, 500);
-    };
-
-    const startDragging = (taskId: string) => {
-        setDraggingTaskId(taskId);
-    };
-
-    const handleTaskPointerMove = (e: React.PointerEvent, taskId: string) => {
-        if (!draggingTaskId) return;
-        if (draggingTaskId === taskId) return;
-        setDropOverTaskId(taskId);
-    };
-
-    const handleTaskPointerUp = async () => {
-        if (longPressTimer.current) clearTimeout(longPressTimer.current);
-        
-        if (draggingTaskId && dropOverTaskId && goal) {
-            const newLinkedIds = [...goal.linkedTasksIds];
-            const dragIdx = newLinkedIds.indexOf(draggingTaskId);
-            const dropIdx = newLinkedIds.indexOf(dropOverTaskId);
-
-            if (dragIdx !== -1 && dropIdx !== -1) {
-                // Remove from old pos and insert at new pos
-                newLinkedIds.splice(dragIdx, 1);
-                newLinkedIds.splice(dropIdx, 0, draggingTaskId);
-                await updateGoal({ linkedTasksIds: newLinkedIds });
-            }
-        }
-
-        setDraggingTaskId(null);
-        setDropOverTaskId(null);
     };
 
     const handleCompleteStage = async (stageId: string) => { if (window.confirm("Завершить весь этап? Все связанные задачи и KPI будут отмечены как выполненные.")) await completeStage(stageId); };
@@ -436,7 +473,7 @@ const GoalBlueprint: React.FC<{
     const editingStage = activeEditingStageId ? goal.roadmap.find(r => r.id === activeEditingStageId) : null;
 
     return (
-        <div className="h-full flex flex-col bg-slate-950 text-white overflow-hidden relative" onPointerUp={handleTaskPointerUp} onContextMenu={e => e.preventDefault()}>
+        <div className="h-full flex flex-col bg-slate-950 text-white overflow-hidden relative" onContextMenu={e => e.preventDefault()}>
             {showReportModal && report && <GoalReportModal report={report} onClose={() => setShowReportModal(false)} />}
             {isEditing && <GoalComposer initialGoal={goal} onClose={() => setIsEditing(false)} onSave={handleSaveEdit} />}
             {linkingStageId && <PlanPickerModal plans={availablePlans} onPick={handlePlanLink} onClose={() => setLinkingStageId(null)} />}
@@ -488,7 +525,11 @@ const GoalBlueprint: React.FC<{
                         {goal.roadmap.map((stage, index) => {
                             const stageTasks = tasks.filter(t => t.stageId === stage.id);
                             // Sort based on their order in goal.linkedTasksIds
-                            stageTasks.sort((a, b) => goal.linkedTasksIds.indexOf(a.id) - goal.linkedTasksIds.indexOf(b.id));
+                            stageTasks.sort((a, b) => {
+                                const idxA = goal.linkedTasksIds.indexOf(a.id);
+                                const idxB = goal.linkedTasksIds.indexOf(b.id);
+                                return idxA - idxB;
+                            });
 
                             const doneCount = stageTasks.filter(t => t.status === TaskStatus.DONE).length;
                             const isDone = stageTasks.length > 0 && doneCount === stageTasks.length;
@@ -537,15 +578,15 @@ const GoalBlueprint: React.FC<{
                                                 {stageKPIs.map(kpi => <KPICard key={kpi.id} kpi={kpi} onUpdate={handleUpdateKPI} onDelete={handleDeleteKPI} compact={true} />)}
                                             </div>
                                         )}
-                                        <div className="p-2 space-y-1 bg-black/20">
+                                        <div className="p-2 space-y-1 bg-black/20 relative" onPointerMove={handleTaskPointerMove} onPointerUp={handleTaskPointerUp}>
                                             {stageTasks.map((task) => (
                                                 <div 
                                                     key={task.id} 
+                                                    data-task-id={task.id}
                                                     onPointerDown={(e) => handleTaskPointerDown(e, task.id)}
-                                                    onPointerMove={(e) => handleTaskPointerMove(e, task.id)}
-                                                    className={`flex items-center gap-3 p-3 rounded-xl transition-all group/task cursor-grab active:cursor-grabbing relative ${
-                                                        draggingTaskId === task.id ? 'bg-indigo-600/40 opacity-50 scale-95 shadow-inner z-50 ring-2 ring-indigo-500/50' : 
-                                                        dropOverTaskId === task.id ? 'border-t-2 border-indigo-500 pt-5 bg-indigo-900/10' : 'hover:bg-slate-800'
+                                                    className={`flex items-center gap-3 p-3 rounded-xl transition-all group/task cursor-grab active:cursor-grabbing relative select-none touch-none ${
+                                                        draggingTaskId === task.id ? 'bg-indigo-600/40 opacity-50 scale-[1.02] shadow-2xl z-50 ring-2 ring-indigo-500 pointer-events-none' : 
+                                                        dropOverTaskId === task.id ? 'border-t-4 border-indigo-500 pt-5 bg-indigo-900/20' : 'hover:bg-slate-800/50'
                                                     }`}
                                                 >
                                                     <div className="shrink-0 text-slate-600 group-hover/task:text-indigo-400 transition-colors">
@@ -557,12 +598,17 @@ const GoalBlueprint: React.FC<{
                                                     >
                                                         {task.status === TaskStatus.DONE ? <CheckCircle2 size={18} /> : <Circle size={18} />}
                                                     </div>
-                                                    <div className="flex-1 min-w-0" onClick={() => !draggingTaskId && onNavigate({ type: 'TASK_EDIT', taskId: task.id })}>
+                                                    <div className="flex-1 min-w-0" onClick={() => !draggingTaskId && onNavigate({ type: 'TASK_EDIT', taskId: task.id, returnToGoalId: goal.id })}>
                                                         <span className={`text-sm truncate block ${task.status === TaskStatus.DONE ? 'text-slate-500 line-through' : 'text-slate-200'}`}>{task.title}</span>
                                                     </div>
                                                     <div className="flex items-center gap-2 opacity-0 group-hover/task:opacity-100 transition-opacity">
                                                         {task.priority === Priority.HIGH && <span className="text-[9px] bg-rose-900/50 text-rose-400 px-1.5 py-0.5 rounded font-bold">HIGH</span>}
                                                     </div>
+                                                    
+                                                    {/* Drop Indicator (When dragging) */}
+                                                    {dropOverTaskId === task.id && (
+                                                        <div className="absolute -top-1 left-0 right-0 h-1 bg-indigo-500 rounded-full animate-pulse" />
+                                                    )}
                                                 </div>
                                             ))}
                                             {addingTaskToStageId === stage.id ? (
@@ -596,7 +642,7 @@ const GoalBlueprint: React.FC<{
             </div>
 
             <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-slate-950 via-slate-950 to-transparent z-30 pb-safe pt-10 flex gap-3">
-                <button onClick={handleStartSession} className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-95"><Play size={20} fill="currentColor" /> Старт сессии</button>
+                <button onClick={handleStartSession} className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-95"><Play size={20} fill="currentColor" /> Старт сессии</button>
                 <div className="flex gap-2">
                     <button onClick={() => setIsEditing(true)} className="w-14 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl flex items-center justify-center transition-colors"><Edit2 size={20} /></button>
                     <button onClick={handleDeleteGoal} className="w-14 bg-slate-800 hover:bg-rose-900/50 text-slate-300 hover:text-rose-500 rounded-2xl flex items-center justify-center transition-colors"><Trash2 size={20} /></button>
@@ -606,9 +652,8 @@ const GoalBlueprint: React.FC<{
     );
 };
 
-export const Goals: React.FC<{ userId: string, onNavigate: (view: any) => void, labels: any }> = ({ userId, onNavigate, labels }) => {
+export const Goals: React.FC<{ userId: string, initialGoalId?: string, onNavigate: (view: any) => void, labels: any }> = ({ userId, initialGoalId, onNavigate, labels }) => {
     const [goals, setGoals] = useState<GoalEntity[]>([]);
-    const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
 
     const refresh = () => { setGoals(GoalRepository.getAll(userId)); };
@@ -644,7 +689,14 @@ export const Goals: React.FC<{ userId: string, onNavigate: (view: any) => void, 
         refresh();
     };
 
-    if (selectedGoalId) { return <GoalBlueprint goalId={selectedGoalId} userId={userId} onBack={() => { setSelectedGoalId(null); refresh(); }} onNavigate={onNavigate} />; }
+    if (initialGoalId) { 
+        return <GoalBlueprint 
+            goalId={initialGoalId} 
+            userId={userId} 
+            onBack={() => { onNavigate('GOALS'); refresh(); }} 
+            onNavigate={onNavigate} 
+        />; 
+    }
 
     return (
         <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
@@ -656,7 +708,7 @@ export const Goals: React.FC<{ userId: string, onNavigate: (view: any) => void, 
             <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
                 {goals.length === 0 && ( <div className="text-center py-20 text-slate-400"> <Target size={48} className="mx-auto mb-3 opacity-50" /> <p>No goals set.</p> <button onClick={() => setIsCreating(true)} className="text-indigo-500 font-bold mt-2">Create First Goal</button> </div> )}
                 {goals.map(goal => (
-                    <div key={goal.id} onClick={() => setSelectedGoalId(goal.id)} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm cursor-pointer hover:border-indigo-500 dark:hover:border-indigo-500 transition-all group">
+                    <div key={goal.id} onClick={() => onNavigate({ type: 'GOAL_DETAIL', goalId: goal.id })} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm cursor-pointer hover:border-indigo-500 dark:hover:border-indigo-500 transition-all group">
                         <div className="flex justify-between items-start mb-2">
                             <div>
                                 <h3 className="font-bold text-lg text-slate-900 dark:text-white group-hover:text-indigo-500 transition-colors">{goal.title}</h3>

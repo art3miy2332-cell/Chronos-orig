@@ -165,10 +165,34 @@ const App: React.FC = () => {
             return <TaskForm userId={currentUser.id} initialPlannedAt={currentView.initialPlannedAt} onNavigateBack={navigateBack} labels={labels} />;
         }
         if (currentView.type === 'TASK_EDIT') {
-            return <TaskForm userId={currentUser.id} taskId={currentView.taskId} initialTitle={currentView.initialTitle} onNavigateBack={() => navigateTo({ type: 'TASK_DETAIL', taskId: currentView.taskId! })} labels={labels} />;
+            return <TaskForm 
+                userId={currentUser.id} 
+                taskId={currentView.taskId} 
+                initialTitle={currentView.initialTitle} 
+                onNavigateBack={() => {
+                    if (currentView.returnToGoalId) {
+                        navigateTo({ type: 'GOAL_DETAIL', goalId: currentView.returnToGoalId });
+                    } else {
+                        navigateTo({ type: 'TASK_DETAIL', taskId: currentView.taskId!, returnToGoalId: currentView.returnToGoalId });
+                    }
+                }} 
+                labels={labels} 
+            />;
         }
         if (currentView.type === 'TASK_DETAIL') {
-             return <TaskDetail taskId={currentView.taskId} onNavigateBack={navigateBack} onNavigateEdit={() => navigateTo({ type: 'TASK_EDIT', taskId: currentView.taskId })} onNavigate={navigateTo} labels={labels} />;
+             return <TaskDetail 
+                taskId={currentView.taskId} 
+                onNavigateBack={() => {
+                    if (currentView.returnToGoalId) {
+                        navigateTo({ type: 'GOAL_DETAIL', goalId: currentView.returnToGoalId });
+                    } else {
+                        navigateBack();
+                    }
+                }} 
+                onNavigateEdit={() => navigateTo({ type: 'TASK_EDIT', taskId: currentView.taskId, returnToGoalId: currentView.returnToGoalId })} 
+                onNavigate={navigateTo} 
+                labels={labels} 
+            />;
         }
         if (currentView.type === 'FOCUS') {
             return <FocusTimer taskId={currentView.taskId} onNavigateBack={navigateBack} labels={labels} />;
@@ -205,6 +229,9 @@ const App: React.FC = () => {
         }
         if (currentView.type === 'LIFE_MAP') {
             return <LifeMapCanvas userId={currentUser.id} onNavigate={navigateTo} focusGoalId={currentView.focusGoalId} />;
+        }
+        if (currentView.type === 'GOAL_DETAIL') {
+            return <Goals userId={currentUser.id} initialGoalId={currentView.goalId} onNavigate={navigateTo} labels={labels} />;
         }
     }
 
