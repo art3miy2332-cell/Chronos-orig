@@ -18,8 +18,8 @@ const DEFAULT_ROW_HEIGHT = 64;
 const MIN_ROW_HEIGHT = 36;
 const MAX_ROW_HEIGHT = 180;
 const HEADER_HEIGHT_PX = 48;
-const LONG_PRESS_DELAY = 400; // задержка перед началом перетаскивания (мс)
-const MOVE_CANCEL_THRESHOLD = 10; // порог движения для отмены захвата (px)
+const LONG_PRESS_DELAY = 350; // Слегка уменьшено для отзывчивости
+const MOVE_CANCEL_THRESHOLD = 10; 
 
 const getZoned = (ts: number, timezone: string) => DateUtils.getZonedParts(ts, timezone);
 
@@ -289,7 +289,6 @@ const TimeGrid: React.FC<{
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
-        // Если мы перетаскиваем задачу, полностью блокируем свайпы календаря
         if (activeInteraction) {
             if (e.cancelable) e.preventDefault();
             return;
@@ -336,10 +335,9 @@ const TimeGrid: React.FC<{
     };
 
     const onPointerDown = (e: React.PointerEvent, task: TaskEntity, type: 'MOVE' | 'RESIZE') => {
-        if (e.button !== 0) return; // Только левая кнопка / основной палец
+        if (e.button !== 0) return;
         e.stopPropagation();
         
-        // Изменение размера остается мгновенным для точности
         if (type === 'RESIZE') {
             const interaction = {
                 type,
@@ -357,7 +355,6 @@ const TimeGrid: React.FC<{
             return;
         }
 
-        // Логика перемещения требует удержания (Long Press) для предотвращения конфликтов со скроллом
         holdStartPosRef.current = { x: e.clientX, y: e.clientY };
         downedTaskRef.current = task;
         
@@ -391,7 +388,6 @@ const TimeGrid: React.FC<{
     };
 
     const onPointerMove = (e: React.PointerEvent) => {
-        // Если мы ждем удержания и указатель сместился слишком сильно, отменяем захват
         if (holdTimerRef.current && holdStartPosRef.current) {
             const dx = Math.abs(e.clientX - holdStartPosRef.current.x);
             const dy = Math.abs(e.clientY - holdStartPosRef.current.y);
@@ -406,19 +402,19 @@ const TimeGrid: React.FC<{
         if (!activeInteraction) return;
         e.stopPropagation();
         
-        // Предотвращаем дефолтное поведение (скролл) при активном перетаскивании
-        if (e.cancelable) e.preventDefault();
+        // ПРИНУДИТЕЛЬНАЯ БЛОКИРОВКА СКРОЛЛА ПРИ ДВИЖЕНИИ
+        if (e.cancelable) {
+            e.preventDefault();
+        }
         
         setActiveInteraction(prev => prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null);
     };
 
     const onPointerUp = (e: React.PointerEvent) => {
-        // Очистка таймера удержания
         if (holdTimerRef.current) {
             clearTimeout(holdTimerRef.current);
             holdTimerRef.current = null;
             
-            // Если это был быстрый отпуск без сильного движения - это клик
             if (holdStartPosRef.current) {
                 const dx = Math.abs(e.clientX - holdStartPosRef.current.x);
                 const dy = Math.abs(e.clientY - holdStartPosRef.current.y);
@@ -443,7 +439,6 @@ const TimeGrid: React.FC<{
         const deltaX = currentX - initialX;
         const dist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
         
-        // Если смещение минимально, трактуем как навигацию
         if (dist < 8) {
             onNavigate({ type: 'TASK_DETAIL', taskId: task.id.split('_')[0] });
         } else {
@@ -587,7 +582,8 @@ const TimeGrid: React.FC<{
                                         const tagEntity = taskTag ? tags.find(t => t.name === taskTag) : null;
                                         const tagColor = tagEntity?.colorHex;
 
-                                        let blockClass = `absolute left-0.5 right-0.5 rounded sm:p-1 p-0.5 text-[8px] sm:text-[10px] font-medium overflow-hidden border transition-all z-10 hover:z-20 shadow-sm touch-pan-y ${isBeingInteracted ? 'shadow-xl scale-[1.05] opacity-90 z-50 ring-2 ring-indigo-500/50 cursor-grabbing duration-0' : 'cursor-pointer'} `;
+                                        // touch-none КОГДА ЗАХВАЧЕНО, ИНАЧЕ touch-pan-y
+                                        let blockClass = `absolute left-0.5 right-0.5 rounded sm:p-1 p-0.5 text-[8px] sm:text-[10px] font-medium overflow-hidden border transition-all z-10 hover:z-20 shadow-sm ${isBeingInteracted ? 'shadow-xl scale-[1.05] opacity-90 z-50 ring-2 ring-indigo-500/50 cursor-grabbing duration-0 touch-none' : 'cursor-pointer touch-pan-y'} `;
                                         blockClass += getEventColorClasses(task.priority, isDone, !!tagColor);
                                         
                                         const inlineStyle: React.CSSProperties = { top: `${top}px`, height: `${Math.max(18, height)}px` };
