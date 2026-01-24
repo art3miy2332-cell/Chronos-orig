@@ -135,14 +135,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
             {/* Main Content Area */}
             <main className="flex-1 overflow-y-auto overflow-x-hidden relative no-scrollbar">
                 
-                {/* Floating Open Button (Only visible when sidebar is closed) */}
+                {/* Floating Open Button - Moved to bottom left to avoid header overlap */}
                 {!isSidebarOpen && (
                     <button 
                         onClick={() => setIsSidebarOpen(true)}
-                        className="absolute top-2 left-2 z-50 p-2 rounded-lg text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-slate-200 transition-all opacity-40 hover:opacity-100 hover:bg-white/50 dark:hover:bg-black/50 backdrop-blur-sm"
+                        className="absolute bottom-6 left-6 z-[60] w-10 h-10 rounded-full bg-white/90 dark:bg-slate-900/90 text-indigo-600 dark:text-indigo-400 shadow-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center transition-all hover:scale-110 active:scale-95 backdrop-blur-md"
                         title="Открыть меню"
                     >
-                        <Menu size={18} />
+                        <Menu size={20} />
                     </button>
                 )}
 

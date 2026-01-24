@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Minus, Navigation, Type, Undo, Redo, Trash2, Target, MousePointer2, AlertCircle, RefreshCw, X, Zap, ChevronRight, LayoutList, User, Calendar, ExternalLink, Save, Battery, Link2, Ban, ArrowRight, Layers, Lightbulb, HelpCircle, AlertTriangle, Book, Brain, FlaskConical, CheckSquare, GripHorizontal, ShieldAlert, Tag as TagIcon, Trophy, TrendingUp } from 'lucide-react';
+import { Plus, Minus, Navigation, Type, Undo, Redo, Trash2, Target, MousePointer2, AlertCircle, RefreshCw, X, Zap, ChevronRight, LayoutList, User, Calendar, ExternalLink, Save, Battery, Link2, Ban, ArrowRight, Layers, Lightbulb, HelpCircle, AlertTriangle, Book, Brain, FlaskConical, CheckSquare, GripHorizontal, ShieldAlert, Tag as TagIcon, Trophy, TrendingUp, Activity, Flame } from 'lucide-react';
 import { DatabaseService } from '../../utils/db';
-import { MapNodeEntity, MapNodeType, MapEdgeEntity, SyncMeta, MapEdgeType, CurrentSelfData, FutureSelfData, GraphAnalysisResult, AnalysisRuleId, MapNodeHealth, GoalEntity, TaskEntity, Priority } from '../../types';
+import { MapNodeEntity, MapNodeType, MapEdgeEntity, SyncMeta, MapEdgeType, CurrentSelfData, FutureSelfData, GraphAnalysisResult, AnalysisRuleId, MapNodeHealth, GoalEntity, TaskEntity, HabitEntity, Priority } from '../../types';
 import { MapAnalysisService } from '../../utils/map-analysis';
 import { UseCases } from '../../domain/usecases';
 import { MapHistoryManager } from '../../utils/map-history';
-import { GoalRepository, TaskRepository } from '../../data/repositories';
+import { GoalRepository, TaskRepository, HabitRepository } from '../../data/repositories';
 
 interface Props {
     userId: string;
@@ -288,6 +288,7 @@ const NodeInspector: React.FC<{
                         node.type === MapNodeType.FUTURE_SELF ? <Zap size={18} className="text-emerald-500" /> : 
                         node.type === MapNodeType.LIMITATION ? <ShieldAlert size={18} className="text-rose-500" /> : 
                         node.type === MapNodeType.STEP ? <CheckSquare size={18} className="text-blue-500" /> : 
+                        node.type === MapNodeType.HABIT ? <Activity size={18} className="text-orange-500" /> : 
                         <Brain size={18} className="text-slate-500" />}
                         <span className="font-bold text-sm text-slate-700 dark:text-slate-200 uppercase">{node.type === MapNodeType.LIMITATION ? "Барьер" : node.type === MapNodeType.NOTE ? "Заметка" : node.type.replace('_', ' ')}</span>
                     </div>
@@ -330,6 +331,7 @@ const NodeInspector: React.FC<{
                         </div>
                     )}
                     {node.type === MapNodeType.GOAL && node.references?.goalId && <button onClick={() => onNavigate({ type: 'GOAL_DETAIL', goalId: node.references.goalId })} className="w-full py-3 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors"><ExternalLink size={16} /> Открыть Цель</button>}
+                    {node.type === MapNodeType.HABIT && node.references?.habitId && <button onClick={() => onNavigate({ type: 'HABIT_DETAIL', habitId: node.references.habitId })} className="w-full py-3 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-orange-200 dark:hover:bg-orange-900/50 transition-colors"><ExternalLink size={16} /> Детали Привычки</button>}
                 </div>
                 <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex gap-3 bg-white dark:bg-slate-900 pb-safe md:pb-4">
                     <button onClick={handleSave} className="flex-1 py-4 md:py-2.5 bg-indigo-600 text-white rounded-xl text-base md:text-sm font-bold shadow-lg hover:bg-indigo-700 flex items-center justify-center gap-2"><Save size={18} /> Сохранить</button>
@@ -343,11 +345,13 @@ const NodeInspector: React.FC<{
 const LibraryPanel: React.FC<{ 
     goals: GoalEntity[], 
     tasks: TaskEntity[],
+    habits: HabitEntity[],
     onPickGoal: (goal: GoalEntity) => void, 
     onPickTask: (task: TaskEntity) => void,
+    onPickHabit: (habit: HabitEntity) => void,
     onClose: () => void
-}> = ({ goals, tasks, onPickGoal, onPickTask, onClose }) => {
-    const [activeTab, setActiveTab] = useState<'GOALS' | 'TASKS'>('GOALS');
+}> = ({ goals, tasks, habits, onPickGoal, onPickTask, onPickHabit, onClose }) => {
+    const [activeTab, setActiveTab] = useState<'GOALS' | 'TASKS' | 'HABITS'>('GOALS');
     return (
         <>
             <PanelBackdrop onClose={onClose} />
@@ -358,12 +362,14 @@ const LibraryPanel: React.FC<{
                     <button onClick={onClose} className="p-1"><X size={18} className="text-slate-400" /></button>
                 </div>
                 <div className="flex border-b border-slate-200 dark:border-slate-700">
-                    <button onClick={() => setActiveTab('GOALS')} className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'GOALS' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Цели ({goals.length})</button>
-                    <button onClick={() => setActiveTab('TASKS')} className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'TASKS' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Задачи ({tasks.length})</button>
+                    <button onClick={() => setActiveTab('GOALS')} className={`flex-1 py-3 text-[10px] font-bold transition-colors ${activeTab === 'GOALS' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Цели ({goals.length})</button>
+                    <button onClick={() => setActiveTab('TASKS')} className={`flex-1 py-3 text-[10px] font-bold transition-colors ${activeTab === 'TASKS' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Задачи ({tasks.length})</button>
+                    <button onClick={() => setActiveTab('HABITS')} className={`flex-1 py-3 text-[10px] font-bold transition-colors ${activeTab === 'HABITS' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Привычки ({habits.length})</button>
                 </div>
                 <div className="overflow-y-auto flex-1 p-2 pb-10 md:pb-2 no-scrollbar">
                     {activeTab === 'GOALS' && ( <div className="space-y-1">{goals.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Все цели уже на карте.</div> : goals.map(goal => (<div key={goal.id} onClick={() => { onPickGoal(goal); onClose(); }} className="p-3 border-b border-slate-50 dark:border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><Target size={18} className="text-indigo-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{goal.title}</div><div className="text-[10px] text-slate-400 mt-0.5">{goal.progress}% завершено</div></div></div>))}</div>)}
                     {activeTab === 'TASKS' && ( <div className="space-y-1">{tasks.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Нет свободных активных задач.</div> : tasks.map(task => (<div key={task.id} onClick={() => { onPickTask(task); onClose(); }} className="p-3 border-b border-slate-50 dark:border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><CheckSquare size={18} className="text-blue-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{task.title}</div><div className={`text-[10px] uppercase font-bold mt-0.5 ${getPriorityColor(task.priority)}`}>{task.priority}</div></div></div>))}</div>)}
+                    {activeTab === 'HABITS' && ( <div className="space-y-1">{habits.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Все привычки на карте.</div> : habits.map(habit => (<div key={habit.id} onClick={() => { onPickHabit(habit); onClose(); }} className="p-3 border-b border-slate-50 dark:border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><Activity size={18} className="text-orange-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{habit.title}</div><div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1"><Flame size={10} className="text-orange-500" /> {habit.streak} дней</div></div></div>))}</div>)}
                 </div>
             </div>
         </>
@@ -395,6 +401,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     const [showLibrary, setShowLibrary] = useState(false);
     const [unmappedGoals, setUnmappedGoals] = useState<GoalEntity[]>([]);
     const [unmappedTasks, setUnmappedTasks] = useState<TaskEntity[]>([]);
+    const [unmappedHabits, setUnmappedHabits] = useState<HabitEntity[]>([]);
     const containerRef = useRef<HTMLDivElement>(null);
     const lastFocusedIdRef = useRef<string | null>(null);
 
@@ -431,12 +438,20 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         const loadedEdges = DatabaseService.mapEdges.getByMapId(mid);
         setNodes(loadedNodes);
         setEdges(loadedEdges);
+        
+        // Data for library
         const allGoals = GoalRepository.getAll(userId);
         const mappedGoalIds = new Set(loadedNodes.map(n => n.references?.goalId).filter(Boolean));
         setUnmappedGoals(allGoals.filter(g => !mappedGoalIds.has(g.id)));
+        
         const allTasks = TaskRepository.getTasksForUser(userId).data;
         const mappedTaskIds = new Set(loadedNodes.map(n => n.references?.taskId).filter(Boolean));
         setUnmappedTasks(allTasks.filter(t => !mappedTaskIds.has(t.id) && t.status !== 'DONE'));
+
+        const allHabits = HabitRepository.getHabitsForUser(userId).data;
+        const mappedHabitIds = new Set(loadedNodes.map(n => n.references?.habitId).filter(Boolean));
+        setUnmappedHabits(allHabits.filter(h => !mappedHabitIds.has(h.id)));
+
         if (historyManagerRef.current && !historyManagerRef.current.getCurrentSnapshot()) {
             historyManagerRef.current.push(loadedNodes, loadedEdges, 'INIT');
         }
@@ -496,17 +511,42 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     };
 
     const saveToDb = (currentNodes: MapNodeEntity[], currentEdges: MapEdgeEntity[]) => {
+        if (!mapId) return;
+
+        // 1. Handle Node deletions: Find nodes in DB that aren't in current state
+        const dbNodes = DatabaseService.mapNodes.getByMapId(mapId);
+        const currentNodeIds = new Set(currentNodes.map(n => n.id));
+        dbNodes.forEach(node => {
+            if (!currentNodeIds.has(node.id)) {
+                DatabaseService.mapNodes.delete(node.id);
+            }
+        });
+        // 2. Insert/Update current nodes
         currentNodes.forEach(n => DatabaseService.mapNodes.update(n));
-        const dbEdges = DatabaseService.mapEdges.getByMapId(mapId!);
-        const currentIds = new Set(currentEdges.map(e => e.id));
-        dbEdges.forEach(e => { if (!currentIds.has(e.id)) DatabaseService.mapEdges.delete(e.id); });
-        currentEdges.forEach(e => { const exists = dbEdges.find(de => de.id === e.id); if (exists) DatabaseService.mapEdges.update(e); else DatabaseService.mapEdges.insert(e); });
+
+        // 3. Handle Edge deletions
+        const dbEdges = DatabaseService.mapEdges.getByMapId(mapId);
+        const currentEdgeIds = new Set(currentEdges.map(e => e.id));
+        dbEdges.forEach(edge => {
+            if (!currentEdgeIds.has(edge.id)) {
+                DatabaseService.mapEdges.delete(edge.id);
+            }
+        });
+        // 4. Insert/Update current edges
+        currentEdges.forEach(e => DatabaseService.mapEdges.update(e));
+        
+        // Refresh Library lists
         const allGoals = GoalRepository.getAll(userId);
         const mappedGoalIds = new Set(currentNodes.map(n => n.references?.goalId).filter(Boolean));
         setUnmappedGoals(allGoals.filter(g => !mappedGoalIds.has(g.id)));
+        
         const allTasks = TaskRepository.getTasksForUser(userId).data;
         const mappedTaskIds = new Set(currentNodes.map(n => n.references?.taskId).filter(Boolean));
         setUnmappedTasks(allTasks.filter(t => !mappedTaskIds.has(t.id) && t.status !== 'DONE'));
+
+        const allHabits = HabitRepository.getHabitsForUser(userId).data;
+        const mappedHabitIds = new Set(currentNodes.map(n => n.references?.habitId).filter(Boolean));
+        setUnmappedHabits(allHabits.filter(h => !mappedHabitIds.has(h.id)));
     };
 
     const handleWheel = (e: React.WheelEvent) => {
@@ -755,6 +795,15 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE', `Added Task: ${task.title}`); saveToDb(newNodes, edges);
     };
 
+    const handleAddExistingHabit = async (habit: HabitEntity) => {
+        if (!mapId || !containerRef.current) return;
+        const w = containerRef.current.clientWidth, h = containerRef.current.clientHeight;
+        const worldPos = screenToWorld(w / 2, h / 2, viewport);
+        const newNode: MapNodeEntity = { id: uuid(), mapId: mapId, type: MapNodeType.HABIT, position: worldPos, content: { label: habit.title }, references: { habitId: habit.id }, meta: createMeta() };
+        const newNodes = [...nodes, newNode];
+        setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE', `Added Habit: ${habit.title}`); saveToDb(newNodes, edges);
+    };
+
     const commitEdit = () => {
         if (editingNodeId) {
             const newNodes = nodes.map(n => n.id === editingNodeId ? { ...n, content: { ...n.content, label: editText } } : n);
@@ -854,7 +903,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
             
             {showLibrary && (
                 <div className="md:mt-0 mt-16">
-                     <LibraryPanel goals={unmappedGoals} tasks={unmappedTasks} onPickGoal={handleAddExistingGoal} onPickTask={handleAddExistingTask} onClose={() => setShowLibrary(false)} />
+                     <LibraryPanel goals={unmappedGoals} tasks={unmappedTasks} habits={unmappedHabits} onPickGoal={handleAddExistingGoal} onPickTask={handleAddExistingTask} onPickHabit={handleAddExistingHabit} onClose={() => setShowLibrary(false)} />
                 </div>
             )}
 
@@ -922,12 +971,14 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                         const isNote = node.type === MapNodeType.NOTE;
                         const isBarrier = node.type === MapNodeType.LIMITATION;
                         const isFutureSelf = node.type === MapNodeType.FUTURE_SELF;
+                        const isHabit = node.type === MapNodeType.HABIT;
                         
                         // Node dynamic styling
                         const nodeBg = isNote ? 'bg-slate-50 dark:bg-slate-800' :
                                        isBarrier ? 'bg-rose-50 border-rose-200 dark:bg-rose-900/20 dark:border-rose-900/50' :
                                        node.type === MapNodeType.CURRENT_SELF ? 'bg-indigo-50 dark:bg-indigo-900/20' :
                                        isFutureSelf ? 'bg-emerald-50 dark:bg-emerald-900/20' :
+                                       isHabit ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' :
                                        'bg-white dark:bg-slate-900'; // Fallback for Goals/Steps
 
                         let timeProgress = 0, orbitColor = "#3b82f6";
@@ -962,6 +1013,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                                         {isNote && <Brain size={12} className="text-slate-400 mb-1" />}
                                         {isBarrier && <ShieldAlert size={12} className="text-rose-500 mb-1" />}
                                         {node.type === MapNodeType.STEP && <CheckSquare size={12} className="text-blue-500 mb-1" />}
+                                        {isHabit && <Activity size={12} className="text-orange-500 mb-1" />}
                                         <div className="font-medium text-center text-slate-800 dark:text-slate-200 pointer-events-none select-none leading-tight text-sm truncate max-w-full">{node.content.label || "Empty"}</div>
                                         {isFutureSelf && (
                                             <div className="flex flex-col items-center mt-1 w-full overflow-hidden">
@@ -980,7 +1032,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                                                 )}
                                             </div>
                                         )}
-                                        {(node.type === MapNodeType.GOAL || node.type === MapNodeType.STEP) && ( <div className="w-full h-1 bg-slate-100 dark:bg-slate-700 rounded-full mt-2 overflow-hidden"><div className={`h-full ${health === MapNodeHealth.HEALTHY ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{width: `${progress}%`}} /></div> )}
+                                        {(node.type === MapNodeType.GOAL || node.type === MapNodeType.STEP || node.type === MapNodeType.HABIT) && ( <div className="w-full h-1 bg-slate-100 dark:bg-slate-700 rounded-full mt-2 overflow-hidden"><div className={`h-full ${health === MapNodeHealth.HEALTHY ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{width: `${progress}%`}} /></div> )}
                                         {node.type === MapNodeType.CURRENT_SELF && <div className="flex flex-col items-center mt-1"><div className="text-[9px] uppercase font-bold text-slate-400">Я Сейчас</div>{node.content.currentSelfData && <div className="text-[8px] text-indigo-500 font-mono mt-0.5">Energy: {node.content.currentSelfData.metrics.averageEnergy}%</div>}</div>}
                                     </>
                                 )}

@@ -123,15 +123,15 @@ export const FocusTimer: React.FC<FocusTimerProps> = ({ taskId, onNavigateBack, 
                 onSave={updateConfig}
              />
              
-             {/* Header */}
-             <div className="p-6 flex justify-between items-center z-10">
-                <button onClick={onNavigateBack} className="p-2 bg-white/50 dark:bg-slate-800/50 rounded-full text-slate-500 hover:text-slate-900 dark:hover:text-white backdrop-blur-sm transition-colors">
+             {/* Header - Improved padding to avoid collisions */}
+             <div className="p-6 pt-8 flex justify-between items-center z-10">
+                <button onClick={onNavigateBack} className="p-2 bg-white/50 dark:bg-slate-800/50 rounded-full text-slate-500 hover:text-slate-900 dark:hover:text-white backdrop-blur-sm transition-colors shadow-sm">
                     <ArrowLeft size={20} />
                 </button>
-                <div className="text-xs font-bold uppercase tracking-widest text-slate-400 bg-white/50 dark:bg-slate-800/50 px-3 py-1 rounded-full backdrop-blur-sm">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 bg-white/50 dark:bg-slate-800/50 px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 dark:border-slate-700/50 shadow-sm">
                     {state.mode === 'FOCUS' ? 'Режим Фокуса' : 'Перерыв'}
                 </div>
-                <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-white/50 dark:bg-slate-800/50 rounded-full text-slate-500 hover:text-indigo-600 backdrop-blur-sm transition-colors">
+                <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-white/50 dark:bg-slate-800/50 rounded-full text-slate-500 hover:text-indigo-600 backdrop-blur-sm transition-colors shadow-sm">
                     <Settings size={20} />
                 </button>
              </div>
