@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Minus, Navigation, Type, Undo, Redo, Trash2, Target, MousePointer2, AlertCircle, RefreshCw, X, Zap, ChevronRight, LayoutList, User, Calendar, ExternalLink, Save, Battery, Link2, Ban, ArrowRight, Layers, Lightbulb, HelpCircle, AlertTriangle, Book, Brain, FlaskConical, CheckSquare, GripHorizontal, ShieldAlert, Tag as TagIcon, Trophy, TrendingUp, Activity, Flame } from 'lucide-react';
+import { Plus, Minus, Navigation, Type, Undo, Redo, Trash2, Target, MousePointer2, AlertCircle, RefreshCw, X, Zap, ChevronRight, LayoutList, User, Calendar, ExternalLink, Save, Battery, Link2, Ban, ArrowRight, Layers, Lightbulb, HelpCircle, AlertTriangle, Book, Brain, FlaskConical, CheckSquare, GripHorizontal, ShieldAlert, Tag as TagIcon, Trophy, TrendingUp, Activity, Flame, Grid } from 'lucide-react';
 import { DatabaseService } from '../../utils/db';
-import { MapNodeEntity, MapNodeType, MapEdgeEntity, SyncMeta, MapEdgeType, CurrentSelfData, FutureSelfData, GraphAnalysisResult, AnalysisRuleId, MapNodeHealth, GoalEntity, TaskEntity, HabitEntity, Priority } from '../../types';
+import { MapNodeEntity, MapNodeType, MapEdgeEntity, SyncMeta, MapEdgeType, CurrentSelfData, FutureSelfData, GraphAnalysisResult, AnalysisRuleId, MapNodeHealth, GoalEntity, TaskEntity, HabitEntity, Priority, PlanType, SpherePlanData, SphereTracker } from '../../types';
 import { MapAnalysisService } from '../../utils/map-analysis';
 import { UseCases } from '../../domain/usecases';
 import { MapHistoryManager } from '../../utils/map-history';
@@ -289,6 +289,7 @@ const NodeInspector: React.FC<{
                         node.type === MapNodeType.LIMITATION ? <ShieldAlert size={18} className="text-rose-500" /> : 
                         node.type === MapNodeType.STEP ? <CheckSquare size={18} className="text-blue-500" /> : 
                         node.type === MapNodeType.HABIT ? <Activity size={18} className="text-orange-500" /> : 
+                        node.type === MapNodeType.QUANTITATIVE_PLAN ? <Grid size={18} className="text-emerald-500" /> :
                         <Brain size={18} className="text-slate-500" />}
                         <span className="font-bold text-sm text-slate-700 dark:text-slate-200 uppercase">{node.type === MapNodeType.LIMITATION ? "Барьер" : node.type === MapNodeType.NOTE ? "Заметка" : node.type.replace('_', ' ')}</span>
                     </div>
@@ -332,6 +333,7 @@ const NodeInspector: React.FC<{
                     )}
                     {node.type === MapNodeType.GOAL && node.references?.goalId && <button onClick={() => onNavigate({ type: 'GOAL_DETAIL', goalId: node.references.goalId })} className="w-full py-3 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors"><ExternalLink size={16} /> Открыть Цель</button>}
                     {node.type === MapNodeType.HABIT && node.references?.habitId && <button onClick={() => onNavigate({ type: 'HABIT_DETAIL', habitId: node.references.habitId })} className="w-full py-3 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-orange-200 dark:hover:bg-orange-900/50 transition-colors"><ExternalLink size={16} /> Детали Привычки</button>}
+                    {node.type === MapNodeType.QUANTITATIVE_PLAN && <button onClick={() => onNavigate('CHECKLISTS')} className="w-full py-3 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"><ExternalLink size={16} /> Управление Планами</button>}
                 </div>
                 <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex gap-3 bg-white dark:bg-slate-900 pb-safe md:pb-4">
                     <button onClick={handleSave} className="flex-1 py-4 md:py-2.5 bg-indigo-600 text-white rounded-xl text-base md:text-sm font-bold shadow-lg hover:bg-indigo-700 flex items-center justify-center gap-2"><Save size={18} /> Сохранить</button>
@@ -346,12 +348,14 @@ const LibraryPanel: React.FC<{
     goals: GoalEntity[], 
     tasks: TaskEntity[],
     habits: HabitEntity[],
+    trackers: SphereTracker[],
     onPickGoal: (goal: GoalEntity) => void, 
     onPickTask: (task: TaskEntity) => void,
     onPickHabit: (habit: HabitEntity) => void,
+    onPickTracker: (tracker: SphereTracker) => void,
     onClose: () => void
-}> = ({ goals, tasks, habits, onPickGoal, onPickTask, onPickHabit, onClose }) => {
-    const [activeTab, setActiveTab] = useState<'GOALS' | 'TASKS' | 'HABITS'>('GOALS');
+}> = ({ goals, tasks, habits, trackers, onPickGoal, onPickTask, onPickHabit, onPickTracker, onClose }) => {
+    const [activeTab, setActiveTab] = useState<'GOALS' | 'TASKS' | 'HABITS' | 'SPHERES'>('GOALS');
     return (
         <>
             <PanelBackdrop onClose={onClose} />
@@ -361,15 +365,17 @@ const LibraryPanel: React.FC<{
                     <span className="font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center gap-2 px-1"><Layers size={14} /> Библиотека</span>
                     <button onClick={onClose} className="p-1"><X size={18} className="text-slate-400" /></button>
                 </div>
-                <div className="flex border-b border-slate-200 dark:border-slate-700">
-                    <button onClick={() => setActiveTab('GOALS')} className={`flex-1 py-3 text-[10px] font-bold transition-colors ${activeTab === 'GOALS' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Цели ({goals.length})</button>
-                    <button onClick={() => setActiveTab('TASKS')} className={`flex-1 py-3 text-[10px] font-bold transition-colors ${activeTab === 'TASKS' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Задачи ({tasks.length})</button>
-                    <button onClick={() => setActiveTab('HABITS')} className={`flex-1 py-3 text-[10px] font-bold transition-colors ${activeTab === 'HABITS' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Привычки ({habits.length})</button>
+                <div className="flex border-b border-slate-200 dark:border-slate-700 overflow-x-auto no-scrollbar">
+                    <button onClick={() => setActiveTab('GOALS')} className={`flex-1 py-3 text-[9px] font-bold whitespace-nowrap px-4 transition-colors ${activeTab === 'GOALS' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Цели ({goals.length})</button>
+                    <button onClick={() => setActiveTab('TASKS')} className={`flex-1 py-3 text-[9px] font-bold whitespace-nowrap px-4 transition-colors ${activeTab === 'TASKS' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Задачи ({tasks.length})</button>
+                    <button onClick={() => setActiveTab('HABITS')} className={`flex-1 py-3 text-[9px] font-bold whitespace-nowrap px-4 transition-colors ${activeTab === 'HABITS' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Привычки ({habits.length})</button>
+                    <button onClick={() => setActiveTab('SPHERES')} className={`flex-1 py-3 text-[9px] font-bold whitespace-nowrap px-4 transition-colors ${activeTab === 'SPHERES' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Планы ({trackers.length})</button>
                 </div>
                 <div className="overflow-y-auto flex-1 p-2 pb-10 md:pb-2 no-scrollbar">
                     {activeTab === 'GOALS' && ( <div className="space-y-1">{goals.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Все цели уже на карте.</div> : goals.map(goal => (<div key={goal.id} onClick={() => { onPickGoal(goal); onClose(); }} className="p-3 border-b border-slate-50 dark:border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><Target size={18} className="text-indigo-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{goal.title}</div><div className="text-[10px] text-slate-400 mt-0.5">{goal.progress}% завершено</div></div></div>))}</div>)}
                     {activeTab === 'TASKS' && ( <div className="space-y-1">{tasks.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Нет свободных активных задач.</div> : tasks.map(task => (<div key={task.id} onClick={() => { onPickTask(task); onClose(); }} className="p-3 border-b border-slate-50 dark:border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><CheckSquare size={18} className="text-blue-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{task.title}</div><div className={`text-[10px] uppercase font-bold mt-0.5 ${getPriorityColor(task.priority)}`}>{task.priority}</div></div></div>))}</div>)}
                     {activeTab === 'HABITS' && ( <div className="space-y-1">{habits.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Все привычки на карте.</div> : habits.map(habit => (<div key={habit.id} onClick={() => { onPickHabit(habit); onClose(); }} className="p-3 border-b border-slate-50 dark:border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><Activity size={18} className="text-orange-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{habit.title}</div><div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1"><Flame size={10} className="text-orange-500" /> {habit.streak} дней</div></div></div>))}</div>)}
+                    {activeTab === 'SPHERES' && ( <div className="space-y-1">{trackers.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Все планы по сферам уже на карте.</div> : trackers.map(t => (<div key={t.id} onClick={() => { onPickTracker(t); onClose(); }} className="p-3 border-b border-slate-50 dark:border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><Grid size={18} className="text-emerald-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{t.title}</div><div className="text-[10px] text-slate-400 mt-0.5">Цель: {t.targetCount}</div></div></div>))}</div>)}
                 </div>
             </div>
         </>
@@ -402,6 +408,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     const [unmappedGoals, setUnmappedGoals] = useState<GoalEntity[]>([]);
     const [unmappedTasks, setUnmappedTasks] = useState<TaskEntity[]>([]);
     const [unmappedHabits, setUnmappedHabits] = useState<HabitEntity[]>([]);
+    const [unmappedTrackers, setUnmappedTrackers] = useState<SphereTracker[]>([]);
     const containerRef = useRef<HTMLDivElement>(null);
     const lastFocusedIdRef = useRef<string | null>(null);
 
@@ -451,6 +458,12 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         const allHabits = HabitRepository.getHabitsForUser(userId).data;
         const mappedHabitIds = new Set(loadedNodes.map(n => n.references?.habitId).filter(Boolean));
         setUnmappedHabits(allHabits.filter(h => !mappedHabitIds.has(h.id)));
+
+        const allTrackers: SphereTracker[] = [];
+        const spherePlans = DatabaseService.plans.getAll().filter(p => p.userId === userId && p.type === PlanType.SPHERES);
+        spherePlans.forEach(p => { if (p.structureJson) { try { const data: SpherePlanData = JSON.parse(p.structureJson); if (data.trackers) allTrackers.push(...data.trackers); } catch(e) {} } });
+        const mappedTrackerIds = new Set(loadedNodes.map(n => n.references?.sphereTrackerId).filter(Boolean));
+        setUnmappedTrackers(allTrackers.filter(t => !mappedTrackerIds.has(t.id)));
 
         if (historyManagerRef.current && !historyManagerRef.current.getCurrentSnapshot()) {
             historyManagerRef.current.push(loadedNodes, loadedEdges, 'INIT');
@@ -513,29 +526,16 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     const saveToDb = (currentNodes: MapNodeEntity[], currentEdges: MapEdgeEntity[]) => {
         if (!mapId) return;
 
-        // 1. Handle Node deletions: Find nodes in DB that aren't in current state
         const dbNodes = DatabaseService.mapNodes.getByMapId(mapId);
         const currentNodeIds = new Set(currentNodes.map(n => n.id));
-        dbNodes.forEach(node => {
-            if (!currentNodeIds.has(node.id)) {
-                DatabaseService.mapNodes.delete(node.id);
-            }
-        });
-        // 2. Insert/Update current nodes
+        dbNodes.forEach(node => { if (!currentNodeIds.has(node.id)) { DatabaseService.mapNodes.delete(node.id); } });
         currentNodes.forEach(n => DatabaseService.mapNodes.update(n));
 
-        // 3. Handle Edge deletions
         const dbEdges = DatabaseService.mapEdges.getByMapId(mapId);
         const currentEdgeIds = new Set(currentEdges.map(e => e.id));
-        dbEdges.forEach(edge => {
-            if (!currentEdgeIds.has(edge.id)) {
-                DatabaseService.mapEdges.delete(edge.id);
-            }
-        });
-        // 4. Insert/Update current edges
+        dbEdges.forEach(edge => { if (!currentEdgeIds.has(edge.id)) { DatabaseService.mapEdges.delete(edge.id); } });
         currentEdges.forEach(e => DatabaseService.mapEdges.update(e));
         
-        // Refresh Library lists
         const allGoals = GoalRepository.getAll(userId);
         const mappedGoalIds = new Set(currentNodes.map(n => n.references?.goalId).filter(Boolean));
         setUnmappedGoals(allGoals.filter(g => !mappedGoalIds.has(g.id)));
@@ -547,6 +547,12 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         const allHabits = HabitRepository.getHabitsForUser(userId).data;
         const mappedHabitIds = new Set(currentNodes.map(n => n.references?.habitId).filter(Boolean));
         setUnmappedHabits(allHabits.filter(h => !mappedHabitIds.has(h.id)));
+
+        const allTrackers: SphereTracker[] = [];
+        const spherePlans = DatabaseService.plans.getAll().filter(p => p.userId === userId && p.type === PlanType.SPHERES);
+        spherePlans.forEach(p => { if (p.structureJson) { try { const data: SpherePlanData = JSON.parse(p.structureJson); if (data.trackers) allTrackers.push(...data.trackers); } catch(e) {} } });
+        const mappedTrackerIds = new Set(currentNodes.map(n => n.references?.sphereTrackerId).filter(Boolean));
+        setUnmappedTrackers(allTrackers.filter(t => !mappedTrackerIds.has(t.id)));
     };
 
     const handleWheel = (e: React.WheelEvent) => {
@@ -560,10 +566,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
 
     const handleTouchStart = (e: React.TouchEvent) => {
         if (e.touches.length === 2) {
-            const d = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
+            const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
             initialPinchDist.current = d;
             initialPinchViewport.current = { ...viewport };
         }
@@ -572,70 +575,37 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     const handleTouchMove = (e: React.TouchEvent) => {
         if (e.touches.length === 2 && initialPinchDist.current !== null && initialPinchViewport.current !== null) {
             if (e.cancelable) e.preventDefault();
-            const currentDist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
+            const currentDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
             const pinchRatio = currentDist / initialPinchDist.current;
             const newZoom = Math.min(Math.max(ZOOM_MIN, initialPinchViewport.current.zoom * pinchRatio), ZOOM_MAX);
             if (containerRef.current) {
                 const rect = containerRef.current.getBoundingClientRect();
-                const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-                const screenPinchX = midX - rect.left;
-                const screenPinchY = midY - rect.top;
+                const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2, midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                const screenPinchX = midX - rect.left, screenPinchY = midY - rect.top;
                 const worldX = (screenPinchX - initialPinchViewport.current.x) / initialPinchViewport.current.zoom;
                 const worldY = (screenPinchY - initialPinchViewport.current.y) / initialPinchViewport.current.zoom;
-                setViewport({
-                    zoom: newZoom,
-                    x: screenPinchX - worldX * newZoom,
-                    y: screenPinchY - worldY * newZoom
-                });
+                setViewport({ zoom: newZoom, x: screenPinchX - worldX * newZoom, y: screenPinchY - worldY * newZoom });
             }
         }
     };
 
-    const handleTouchEnd = (e: React.TouchEvent) => {
-        if (e.touches.length < 2) {
-            initialPinchDist.current = null;
-            initialPinchViewport.current = null;
-        }
-    };
+    const handleTouchEnd = (e: React.TouchEvent) => { if (e.touches.length < 2) { initialPinchDist.current = null; initialPinchViewport.current = null; } };
 
     const handleCanvasPointerDown = (e: React.PointerEvent) => {
         if (edgeDraftMenu) setEdgeDraftMenu(null);
         if (e.button !== 0) return; 
-        
         const isBg = (e.target as HTMLElement).id === 'canvas-bg' || e.target === containerRef.current;
         if (!isBg) return;
-
-        setSelectedNodeIds(new Set()); 
-        setSelectedEdgeId(null); 
-        setActiveInspectorNodeId(null); 
-        setInteractionMode('PANNING'); 
-        setDragStartPos({ x: e.clientX, y: e.clientY }); 
-        setEditingNodeId(null); 
-        containerRef.current?.setPointerCapture(e.pointerId);
+        setSelectedNodeIds(new Set()); setSelectedEdgeId(null); setActiveInspectorNodeId(null); setInteractionMode('PANNING'); setDragStartPos({ x: e.clientX, y: e.clientY }); setEditingNodeId(null); containerRef.current?.setPointerCapture(e.pointerId);
     };
 
     const handleNodePointerDown = (e: React.PointerEvent, nodeId: string) => {
         e.stopPropagation();
         if (interactionMode === 'CONNECTING' || interactionMode === 'RECONNECTING') return; 
         if (e.button === 0) {
-            if (e.shiftKey) {
-                const newSet = new Set(selectedNodeIds);
-                if (newSet.has(nodeId)) newSet.delete(nodeId); else newSet.add(nodeId);
-                setSelectedNodeIds(newSet);
-            } else { 
-                if (!selectedNodeIds.has(nodeId)) {
-                    setSelectedNodeIds(new Set([nodeId])); 
-                }
-            }
-            
-            setSelectedEdgeId(null); 
-            setInteractionMode('DRAGGING'); 
-            setDragStartPos({ x: e.clientX, y: e.clientY });
-            
+            if (e.shiftKey) { const newSet = new Set(selectedNodeIds); if (newSet.has(nodeId)) newSet.delete(nodeId); else newSet.add(nodeId); setSelectedNodeIds(newSet); }
+            else { if (!selectedNodeIds.has(nodeId)) { setSelectedNodeIds(new Set([nodeId])); } }
+            setSelectedEdgeId(null); setInteractionMode('DRAGGING'); setDragStartPos({ x: e.clientX, y: e.clientY });
             const startPos: Record<string, {x:number, y:number}> = {};
             nodes.forEach(n => { if (n.position) startPos[n.id] = { ...n.position }; });
             setNodeStartPositions(startPos);
@@ -702,14 +672,8 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         const isClick = dist < CLICK_THRESHOLD;
 
         if (interactionMode === 'DRAGGING') {
-            if (!isClick) {
-                pushToHistory(nodes, edges, 'MOVE_NODE');
-                saveToDb(nodes, edges);
-            } else {
-                if (selectedNodeIds.size === 1) {
-                    setActiveInspectorNodeId(Array.from(selectedNodeIds)[0]);
-                }
-            }
+            if (!isClick) { pushToHistory(nodes, edges, 'MOVE_NODE'); saveToDb(nodes, edges); }
+            else { if (selectedNodeIds.size === 1) { setActiveInspectorNodeId(Array.from(selectedNodeIds)[0]); } }
         } else if (interactionMode === 'CONNECTING') {
             const element = document.elementFromPoint(e.clientX, e.clientY);
             const targetNodeEl = element?.closest('[data-node-id]');
@@ -748,11 +712,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     };
 
     const handleEdgeClick = (e: React.MouseEvent, edgeId: string) => { 
-        if (e.button !== 0) return; 
-        e.stopPropagation(); 
-        setSelectedEdgeId(edgeId); 
-        setSelectedNodeIds(new Set()); 
-        setActiveInspectorNodeId(null);
+        if (e.button !== 0) return; e.stopPropagation(); setSelectedEdgeId(edgeId); setSelectedNodeIds(new Set()); setActiveInspectorNodeId(null);
     };
 
     const handleCanvasDoubleClick = (e: React.MouseEvent) => {
@@ -762,46 +722,39 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                 const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, viewport);
                 const newNode: MapNodeEntity = { id: uuid(), mapId: mapId!, type: MapNodeType.NOTE, position: worldPos, content: { label: "Заметка" }, references: {}, meta: createMeta() };
                 const newNodes = [...nodes, newNode];
-                setNodes(newNodes); 
-                setSelectedNodeIds(new Set([newNode.id])); 
-                setEditingNodeId(newNode.id); 
-                setEditText(newNode.content.label);
-                setActiveInspectorNodeId(newNode.id);
-                pushToHistory(newNodes, edges, 'ADD_NODE'); saveToDb(newNodes, edges);
+                setNodes(newNodes); setSelectedNodeIds(new Set([newNode.id])); setEditingNodeId(newNode.id); setEditText(newNode.content.label); setActiveInspectorNodeId(newNode.id); pushToHistory(newNodes, edges, 'ADD_NODE'); saveToDb(newNodes, edges);
             }
         }
     };
 
-    const handleNodeDoubleClick = (e: React.MouseEvent, node: MapNodeEntity) => { 
-        e.stopPropagation(); 
-        setEditingNodeId(node.id); 
-        setEditText(node.content.label); 
-    };
+    const handleNodeDoubleClick = (e: React.MouseEvent, node: MapNodeEntity) => { e.stopPropagation(); setEditingNodeId(node.id); setEditText(node.content.label); };
 
     const handleAddExistingGoal = async (goal: GoalEntity) => {
         if (!mapId || !containerRef.current) return;
-        const w = containerRef.current.clientWidth, h = containerRef.current.clientHeight;
-        const worldPos = screenToWorld(w / 2, h / 2, viewport);
+        const worldPos = screenToWorld(containerRef.current.clientWidth / 2, containerRef.current.clientHeight / 2, viewport);
         const res = await UseCases.linkGoalToMap.execute(mapId, goal.id, worldPos);
-        if (res.success) { await loadData(mapId); }
+        if (res.success) await loadData(mapId);
     };
 
     const handleAddExistingTask = async (task: TaskEntity) => {
         if (!mapId || !containerRef.current) return;
-        const w = containerRef.current.clientWidth, h = containerRef.current.clientHeight;
-        const worldPos = screenToWorld(w / 2, h / 2, viewport);
+        const worldPos = screenToWorld(containerRef.current.clientWidth / 2, containerRef.current.clientHeight / 2, viewport);
         const newNode: MapNodeEntity = { id: uuid(), mapId: mapId, type: MapNodeType.STEP, position: worldPos, content: { label: task.title }, references: { taskId: task.id }, meta: createMeta() };
-        const newNodes = [...nodes, newNode];
-        setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE', `Added Task: ${task.title}`); saveToDb(newNodes, edges);
+        const newNodes = [...nodes, newNode]; setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE', `Added Task: ${task.title}`); saveToDb(newNodes, edges);
     };
 
     const handleAddExistingHabit = async (habit: HabitEntity) => {
         if (!mapId || !containerRef.current) return;
-        const w = containerRef.current.clientWidth, h = containerRef.current.clientHeight;
-        const worldPos = screenToWorld(w / 2, h / 2, viewport);
+        const worldPos = screenToWorld(containerRef.current.clientWidth / 2, containerRef.current.clientHeight / 2, viewport);
         const newNode: MapNodeEntity = { id: uuid(), mapId: mapId, type: MapNodeType.HABIT, position: worldPos, content: { label: habit.title }, references: { habitId: habit.id }, meta: createMeta() };
-        const newNodes = [...nodes, newNode];
-        setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE', `Added Habit: ${habit.title}`); saveToDb(newNodes, edges);
+        const newNodes = [...nodes, newNode]; setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE', `Added Habit: ${habit.title}`); saveToDb(newNodes, edges);
+    };
+
+    const handleAddExistingTracker = async (tracker: SphereTracker) => {
+        if (!mapId || !containerRef.current) return;
+        const worldPos = screenToWorld(containerRef.current.clientWidth / 2, containerRef.current.clientHeight / 2, viewport);
+        const newNode: MapNodeEntity = { id: uuid(), mapId: mapId, type: MapNodeType.QUANTITATIVE_PLAN, position: worldPos, content: { label: tracker.title }, references: { sphereTrackerId: tracker.id }, meta: createMeta() };
+        const newNodes = [...nodes, newNode]; setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE', `Added Plan: ${tracker.title}`); saveToDb(newNodes, edges);
     };
 
     const commitEdit = () => {
@@ -813,8 +766,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
 
     const handleNodeUpdate = (updates: Partial<MapNodeEntity>) => {
         if (!activeInspectorNodeId) return;
-        const id = activeInspectorNodeId;
-        const newNodes = nodes.map(n => n.id === id ? { ...n, ...updates } : n);
+        const newNodes = nodes.map(n => n.id === activeInspectorNodeId ? { ...n, ...updates } : n);
         setNodes(newNodes); pushToHistory(newNodes, edges, 'EDIT_CONTENT'); saveToDb(newNodes, edges);
     };
 
@@ -827,15 +779,11 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     const handleDelete = () => {
         if (selectedEdgeId) { deleteEdge(selectedEdgeId); return; }
         if (selectedNodeIds.size === 0) return;
-        const toDelete = Array.from(selectedNodeIds).filter(id => {
-            const node = nodes.find(n => n.id === id);
-            return node && node.type !== MapNodeType.CURRENT_SELF && node.type !== MapNodeType.FUTURE_SELF;
-        });
+        const toDelete = Array.from(selectedNodeIds).filter(id => { const node = nodes.find(n => n.id === id); return node && node.type !== MapNodeType.CURRENT_SELF && node.type !== MapNodeType.FUTURE_SELF; });
         if (toDelete.length === 0) return;
         const newNodes = nodes.filter(n => !toDelete.includes(n.id));
         const newEdges = edges.filter(e => !toDelete.includes(e.sourceNodeId) && !toDelete.includes(e.targetNodeId));
-        setNodes(newNodes); setEdges(newEdges); setSelectedNodeIds(new Set());
-        setActiveInspectorNodeId(null);
+        setNodes(newNodes); setEdges(newEdges); setSelectedNodeIds(new Set()); setActiveInspectorNodeId(null);
         pushToHistory(newNodes, edges, 'DELETE_NODE'); saveToDb(newNodes, edges);
     };
 
@@ -862,95 +810,43 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [selectedNodeIds, selectedEdgeId, nodes, edges, editingNodeId]);
 
-    const activeNodeForInspector = activeInspectorNodeId ? nodes.find(n => n.id === activeInspectorNodeId) : null;
-
     return (
         <div className="w-full h-full relative overflow-hidden bg-slate-50 dark:bg-slate-950 select-none font-sans" style={{ touchAction: 'none' }}>
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[90vw] md:w-full md:max-w-md px-1 md:px-4">
                 <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-2 md:p-3 flex flex-col gap-1.5 md:gap-2">
                     <div className="flex justify-between items-center px-1">
                         <div className="flex items-center gap-2">
-                            <div className="p-1 md:p-1.5 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg text-emerald-600">
-                                <Trophy size={14} className="md:w-4 md:h-4" />
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="text-[8px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-0.5 md:mb-1">Путь к Я 2.0</span>
-                                <span className="text-[10px] md:text-xs font-bold text-slate-700 dark:text-slate-200 truncate max-w-[150px] md:max-w-none">{getMotivationStatus(globalProgress)}</span>
-                            </div>
+                            <div className="p-1 md:p-1.5 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg text-emerald-600"><Trophy size={14} className="md:w-4 md:h-4" /></div>
+                            <div className="flex flex-col"><span className="text-[8px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-0.5 md:mb-1">Путь к Я 2.0</span><span className="text-[10px] md:text-xs font-bold text-slate-700 dark:text-slate-200 truncate max-w-[150px] md:max-w-none">{getMotivationStatus(globalProgress)}</span></div>
                         </div>
-                        <div className="flex items-center gap-1 font-mono text-xs md:text-sm font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 md:px-2 py-0.5 rounded-md">
-                            <TrendingUp size={12} className="md:w-3.5 md:h-3.5" />
-                            {globalProgress}%
-                        </div>
+                        <div className="flex items-center gap-1 font-mono text-xs md:text-sm font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 md:px-2 py-0.5 rounded-md"><TrendingUp size={12} className="md:w-3.5 md:h-3.5" />{globalProgress}%</div>
                     </div>
-                    <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-200/50 dark:border-slate-700/50 p-0.5">
-                        <div className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 rounded-full transition-all duration-1000 ease-out shadow-[0_0_8px_rgba(99,102,241,0.5)]" style={{ width: `${globalProgress}%` }} />
-                    </div>
+                    <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-200/50 dark:border-slate-700/50 p-0.5"><div className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 rounded-full transition-all duration-1000 ease-out shadow-[0_0_8px_rgba(99,102,241,0.5)]" style={{ width: `${globalProgress}%` }} /></div>
                 </div>
             </div>
 
             <div className="absolute top-20 md:top-4 left-4 z-20 flex flex-col gap-2">
                 <div className="bg-white dark:bg-slate-900 p-1.5 md:p-2 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col gap-1.5 md:gap-2">
-                    <button onClick={() => { if (containerRef.current) { const w = containerRef.current.clientWidth, h = containerRef.current.clientHeight; const center = screenToWorld(w/2, h/2, viewport); const newNode: MapNodeEntity = { id: uuid(), mapId: mapId!, type: MapNodeType.NOTE, position: center, content: { label: "Заметка" }, references: {}, meta: createMeta() }; const newNodes = [...nodes, newNode]; setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE'); saveToDb(newNodes, edges); } }} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Add Note"><Brain size={18} className="md:w-5 md:h-5" /></button>
+                    <button onClick={() => { if (containerRef.current) { const worldPos = screenToWorld(containerRef.current.clientWidth / 2, containerRef.current.clientHeight / 2, viewport); const newNode: MapNodeEntity = { id: uuid(), mapId: mapId!, type: MapNodeType.NOTE, position: worldPos, content: { label: "Заметка" }, references: {}, meta: createMeta() }; const newNodes = [...nodes, newNode]; setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE'); saveToDb(newNodes, edges); } }} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"><Brain size={18} className="md:w-5 md:h-5" /></button>
                     <div className="h-px bg-slate-200 dark:bg-slate-700 my-0.5 md:my-1"></div>
                     <button onClick={undo} disabled={!canUndo} className="p-2 text-slate-500 hover:text-slate-900 disabled:opacity-30"><Undo size={18} className="md:w-5 md:h-5" /></button>
                     <button onClick={redo} disabled={!canRedo} className="p-2 text-slate-500 hover:text-slate-900 disabled:opacity-30"><Redo size={18} className="md:w-5 md:h-5" /></button>
                 </div>
-                <button onClick={() => setShowLibrary(!showLibrary)} className="bg-white dark:bg-slate-900 p-2 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20" title="Library"><LayoutList size={18} className="md:w-5 md:h-5" /></button>
+                <button onClick={() => setShowLibrary(!showLibrary)} className="bg-white dark:bg-slate-900 p-2 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"><LayoutList size={18} className="md:w-5 md:h-5" /></button>
             </div>
 
             {edgeDraftMenu && <EdgeCreationPanel x={edgeDraftMenu.x} y={edgeDraftMenu.y} onSelect={handleCreateEdge} onCancel={() => setEdgeDraftMenu(null)} />}
             
-            {showLibrary && (
-                <div className="md:mt-0 mt-16">
-                     <LibraryPanel goals={unmappedGoals} tasks={unmappedTasks} habits={unmappedHabits} onPickGoal={handleAddExistingGoal} onPickTask={handleAddExistingTask} onPickHabit={handleAddExistingHabit} onClose={() => setShowLibrary(false)} />
-                </div>
-            )}
+            {showLibrary && ( <div className="md:mt-0 mt-16"><LibraryPanel goals={unmappedGoals} tasks={unmappedTasks} habits={unmappedHabits} trackers={unmappedTrackers} onPickGoal={handleAddExistingGoal} onPickTask={handleAddExistingTask} onPickHabit={handleAddExistingHabit} onPickTracker={handleAddExistingTracker} onClose={() => setShowLibrary(false)} /></div> )}
 
-            <button 
-                onClick={() => setShowAnalysis(!showAnalysis)} 
-                className={`absolute top-20 md:top-4 right-4 z-30 flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 rounded-xl shadow-lg border transition-all ${analysisResult && analysisResult.issues.length > 0 ? 'bg-amber-100 border-amber-300 text-amber-700 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500'}`}
-            >
-                <AlertCircle size={18} className={`md:w-5 md:h-5 ${analysisResult?.issues.length ? 'animate-pulse' : ''}`} />
-                <span className="font-bold text-xs md:text-sm">{analysisResult ? `${analysisResult.score}%` : 'Анализ'}</span>
-            </button>
+            <button onClick={() => setShowAnalysis(!showAnalysis)} className={`absolute top-20 md:top-4 right-4 z-30 flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 rounded-xl shadow-lg border transition-all ${analysisResult && analysisResult.issues.length > 0 ? 'bg-amber-100 border-amber-300 text-amber-700 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500'}`}><AlertCircle size={18} className={`md:w-5 md:h-5 ${analysisResult?.issues.length ? 'animate-pulse' : ''}`} /><span className="font-bold text-xs md:text-sm">{analysisResult ? `${analysisResult.score}%` : 'Анализ'}</span></button>
+            {showAnalysis && ( <div className="md:mt-0 mt-16"><CoachPanel result={analysisResult} onClose={() => setShowAnalysis(false)} onSelect={focusNode} /></div> )}
 
-            {showAnalysis && (
-                <div className="md:mt-0 mt-16">
-                    <CoachPanel result={analysisResult} onClose={() => setShowAnalysis(false)} onSelect={focusNode} />
-                </div>
-            )}
-
-            {activeNodeForInspector && (
-                <NodeInspector 
-                    node={activeNodeForInspector} 
-                    onUpdate={handleNodeUpdate} 
-                    onDelete={handleDelete} 
-                    onNavigate={onNavigate} 
-                    onClose={() => setActiveInspectorNodeId(null)} 
-                />
-            )}
+            {activeInspectorNodeId && nodes.find(n => n.id === activeInspectorNodeId) && ( <NodeInspector node={nodes.find(n => n.id === activeInspectorNodeId)!} onUpdate={handleNodeUpdate} onDelete={handleDelete} onNavigate={onNavigate} onClose={() => setActiveInspectorNodeId(null)} /> )}
             
-            <div className="absolute bottom-6 right-6 z-20 flex gap-2 bg-white/90 dark:bg-slate-900/90 backdrop-blur p-1.5 md:p-2 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700">
-                <button onClick={() => setViewport(v => ({...v, zoom: Math.max(ZOOM_MIN, v.zoom - 0.1)}))} className="p-1.5 md:p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><Minus size={14} className="md:w-4 md:h-4" /></button>
-                <span className="py-1.5 md:py-2 min-w-[2.5rem] md:min-w-[3rem] text-center text-[10px] md:text-xs font-bold text-slate-500">{Math.round(viewport.zoom * 100)}%</span>
-                <button onClick={() => setViewport(v => ({...v, zoom: Math.min(ZOOM_MAX, v.zoom + 0.1)}))} className="p-1.5 md:p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><Plus size={14} className="md:w-4 md:h-4" /></button>
-            </div>
+            <div className="absolute bottom-6 right-6 z-20 flex gap-2 bg-white/90 dark:bg-slate-900/90 backdrop-blur p-1.5 md:p-2 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700"><button onClick={() => setViewport(v => ({...v, zoom: Math.max(ZOOM_MIN, v.zoom - 0.1)}))} className="p-1.5 md:p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><Minus size={14} className="md:w-4 md:h-4" /></button><span className="py-1.5 md:py-2 min-w-[2.5rem] md:min-w-[3rem] text-center text-[10px] md:text-xs font-bold text-slate-500">{Math.round(viewport.zoom * 100)}%</span><button onClick={() => setViewport(v => ({...v, zoom: Math.min(ZOOM_MAX, v.zoom + 0.1)}))} className="p-1.5 md:p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><Plus size={14} className="md:w-4 md:h-4" /></button></div>
 
-            <div 
-                ref={containerRef} 
-                className="w-full h-full cursor-default relative touch-none" 
-                onPointerDown={handleCanvasPointerDown} 
-                onPointerMove={handlePointerMove} 
-                onPointerUp={handlePointerUp} 
-                onPointerLeave={handlePointerUp} 
-                onWheel={handleWheel} 
-                onDoubleClick={handleCanvasDoubleClick} 
-                onContextMenu={(e) => e.preventDefault()}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-            >
+            <div ref={containerRef} className="w-full h-full cursor-default relative touch-none" onPointerDown={handleCanvasPointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onWheel={handleWheel} onDoubleClick={handleCanvasDoubleClick} onContextMenu={(e) => e.preventDefault()} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
                 <div style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`, transformOrigin: '0 0', width: '100%', height: '100%' }}>
                     <div id="canvas-bg" className="absolute -top-[10000px] -left-[10000px] w-[20000px] h-[20000px] pointer-events-auto" style={{ backgroundImage: 'radial-gradient(circle, #cbd5e1 1px, transparent 1px)', backgroundSize: '40px 40px', opacity: 0.4 }} />
                     <svg className="absolute -top-[10000px] -left-[10000px] w-[20000px] h-[20000px] pointer-events-none overflow-visible" viewBox="-10000 -10000 20000 20000">
@@ -968,71 +864,33 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                         if (hasIssue) borderColor = 'border-rose-400 border-dashed';
                         if (selectedNodeIds.has(node.id)) borderColor = 'border-indigo-500 ring-4 ring-indigo-500/30';
                         const isHoveredForConnection = hoveredNodeId === node.id && (interactionMode === 'CONNECTING' || interactionMode === 'RECONNECTING');
-                        const isNote = node.type === MapNodeType.NOTE;
-                        const isBarrier = node.type === MapNodeType.LIMITATION;
-                        const isFutureSelf = node.type === MapNodeType.FUTURE_SELF;
-                        const isHabit = node.type === MapNodeType.HABIT;
-                        
-                        // Node dynamic styling
-                        const nodeBg = isNote ? 'bg-slate-50 dark:bg-slate-800' :
-                                       isBarrier ? 'bg-rose-50 border-rose-200 dark:bg-rose-900/20 dark:border-rose-900/50' :
+                        const nodeBg = node.type === MapNodeType.NOTE ? 'bg-slate-50 dark:bg-slate-800' :
+                                       node.type === MapNodeType.LIMITATION ? 'bg-rose-50 border-rose-200 dark:bg-rose-900/20 dark:border-rose-900/50' :
                                        node.type === MapNodeType.CURRENT_SELF ? 'bg-indigo-50 dark:bg-indigo-900/20' :
-                                       isFutureSelf ? 'bg-emerald-50 dark:bg-emerald-900/20' :
-                                       isHabit ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' :
-                                       'bg-white dark:bg-slate-900'; // Fallback for Goals/Steps
-
+                                       node.type === MapNodeType.FUTURE_SELF ? 'bg-emerald-50 dark:bg-emerald-900/20' :
+                                       node.type === MapNodeType.HABIT ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' :
+                                       node.type === MapNodeType.QUANTITATIVE_PLAN ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800' :
+                                       'bg-white dark:bg-slate-900';
                         let timeProgress = 0, orbitColor = "#3b82f6";
-                        if (isFutureSelf && node.content.futureSelfData?.horizon?.targetDate) {
+                        if (node.type === MapNodeType.FUTURE_SELF && node.content.futureSelfData?.horizon?.targetDate) {
                             const start = node.meta.createdAt, end = node.content.futureSelfData.horizon.targetDate, nowTs = Date.now();
                             if (end > start) { timeProgress = Math.min(100, Math.max(0, ((nowTs - start) / (end - start)) * 100)); if (timeProgress >= 85) orbitColor = "#ef4444"; else if (timeProgress >= 50) orbitColor = "#f97316"; else if (timeProgress >= 25) orbitColor = "#a855f7"; }
                         }
                         return (
-                            <div key={node.id} data-node-id={node.id} onPointerDown={(e) => handleNodePointerDown(e, node.id)} onDoubleClick={(e) => handleNodeDoubleClick(e, node)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ transform: `translate(${node.position.x}px, ${node.position.y}px)`, width: '150px', minHeight: '60px', touchAction: 'none' }}
-                                className={`absolute top-0 left-0 rounded-xl shadow-sm border-2 flex flex-col justify-center items-center p-3 transition-all hover:shadow-lg group ${borderColor} ${nodeBg}
-                                    ${isHoveredForConnection ? 'ring-4 ring-emerald-400 border-emerald-500 scale-105 z-10' : ''}
-                                `}
-                            >
-                                {isFutureSelf && node.content.futureSelfData?.horizon?.targetDate && (
-                                    <div className="absolute inset-0 -m-[10px] pointer-events-none overflow-visible">
-                                        <svg width="170" height="80" viewBox="0 0 170 80" className="overflow-visible">
-                                            <defs><filter id={`glow-${node.id}`}><feGaussianBlur stdDeviation="2.5" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-                                            <rect x="5" y="5" width="160" height="70" rx="15" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-200 dark:text-slate-800 opacity-30" />
-                                            <rect x="5" y="5" width="160" height="70" rx="15" fill="none" stroke={orbitColor} strokeWidth="3" strokeDasharray="460" strokeDashoffset={460 - (460 * (timeProgress / 100))} strokeLinecap="round" className="transition-all duration-1000 ease-in-out" filter={`url(#glow-${node.id})`} style={{ transformOrigin: 'center', transform: 'rotate(0deg)' }} />
-                                        </svg>
-                                    </div>
-                                )}
-                                <div onPointerDown={(e) => handleConnectPointerDown(e, node.id, 'right')} className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full opacity-0 group-hover:opacity-100 cursor-crosshair z-20 hover:scale-125 transition-all shadow-sm" />
-                                <div onPointerDown={(e) => handleConnectPointerDown(e, node.id, 'left')} className="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full opacity-0 group-hover:opacity-100 cursor-crosshair z-20 hover:scale-125 transition-all shadow-sm" />
-                                <div onPointerDown={(e) => handleConnectPointerDown(e, node.id, 'top')} className="absolute left-1/2 -top-2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full opacity-0 group-hover:opacity-100 cursor-crosshair z-20 hover:scale-125 transition-all shadow-sm" />
-                                <div onPointerDown={(e) => handleConnectPointerDown(e, node.id, 'bottom')} className="absolute left-1/2 -bottom-2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full opacity-0 group-hover:opacity-100 cursor-crosshair z-20 hover:scale-125 transition-all shadow-sm" />
-                                {editingNodeId === node.id ? (
-                                    <textarea value={editText} onChange={(e) => setEditText(e.target.value)} onBlur={commitEdit} autoFocus className="w-full bg-transparent text-center text-sm font-medium outline-none resize-none overflow-hidden h-full dark:text-white" rows={2} />
-                                ) : (
+                            <div key={node.id} data-node-id={node.id} onPointerDown={(e) => handleNodePointerDown(e, node.id)} onDoubleClick={(e) => handleNodeDoubleClick(e, node)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ transform: `translate(${node.position.x}px, ${node.position.y}px)`, width: '150px', minHeight: '60px', touchAction: 'none' }} className={`absolute top-0 left-0 rounded-xl shadow-sm border-2 flex flex-col justify-center items-center p-3 transition-all hover:shadow-lg group ${borderColor} ${nodeBg} ${isHoveredForConnection ? 'ring-4 ring-emerald-400 border-emerald-500 scale-105 z-10' : ''}`}>
+                                {node.type === MapNodeType.FUTURE_SELF && node.content.futureSelfData?.horizon?.targetDate && ( <div className="absolute inset-0 -m-[10px] pointer-events-none overflow-visible"><svg width="170" height="80" viewBox="0 0 170 80" className="overflow-visible"><defs><filter id={`glow-${node.id}`}><feGaussianBlur stdDeviation="2.5" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><rect x="5" y="5" width="160" height="70" rx="15" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-200 dark:text-slate-800 opacity-30" /><rect x="5" y="5" width="160" height="70" rx="15" fill="none" stroke={orbitColor} strokeWidth="3" strokeDasharray="460" strokeDashoffset={460 - (460 * (timeProgress / 100))} strokeLinecap="round" className="transition-all duration-1000 ease-in-out" filter={`url(#glow-${node.id})`} style={{ transformOrigin: 'center', transform: 'rotate(0deg)' }} /></svg></div> )}
+                                <div onPointerDown={(e) => handleConnectPointerDown(e, node.id, 'right')} className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full opacity-0 group-hover:opacity-100 cursor-crosshair z-20 hover:scale-125 transition-all shadow-sm" /><div onPointerDown={(e) => handleConnectPointerDown(e, node.id, 'left')} className="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full opacity-0 group-hover:opacity-100 cursor-crosshair z-20 hover:scale-125 transition-all shadow-sm" /><div onPointerDown={(e) => handleConnectPointerDown(e, node.id, 'top')} className="absolute left-1/2 -top-2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full opacity-0 group-hover:opacity-100 cursor-crosshair z-20 hover:scale-125 transition-all shadow-sm" /><div onPointerDown={(e) => handleConnectPointerDown(e, node.id, 'bottom')} className="absolute left-1/2 -bottom-2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full opacity-0 group-hover:opacity-100 cursor-crosshair z-20 hover:scale-125 transition-all shadow-sm" />
+                                {editingNodeId === node.id ? ( <textarea value={editText} onChange={(e) => setEditText(e.target.value)} onBlur={commitEdit} autoFocus className="w-full bg-transparent text-center text-sm font-medium outline-none resize-none overflow-hidden h-full dark:text-white" rows={2} /> ) : (
                                     <>
                                         {node.type === MapNodeType.GOAL && <Target size={12} className="text-indigo-500 mb-1" />}
-                                        {isNote && <Brain size={12} className="text-slate-400 mb-1" />}
-                                        {isBarrier && <ShieldAlert size={12} className="text-rose-500 mb-1" />}
+                                        {node.type === MapNodeType.NOTE && <Brain size={12} className="text-slate-400 mb-1" />}
+                                        {node.type === MapNodeType.LIMITATION && <ShieldAlert size={12} className="text-rose-500 mb-1" />}
                                         {node.type === MapNodeType.STEP && <CheckSquare size={12} className="text-blue-500 mb-1" />}
-                                        {isHabit && <Activity size={12} className="text-orange-500 mb-1" />}
+                                        {node.type === MapNodeType.HABIT && <Activity size={12} className="text-orange-500 mb-1" />}
+                                        {node.type === MapNodeType.QUANTITATIVE_PLAN && <Grid size={12} className="text-emerald-500 mb-1" />}
                                         <div className="font-medium text-center text-slate-800 dark:text-slate-200 pointer-events-none select-none leading-tight text-sm truncate max-w-full">{node.content.label || "Empty"}</div>
-                                        {isFutureSelf && (
-                                            <div className="flex flex-col items-center mt-1 w-full overflow-hidden">
-                                                <div className="text-[9px] uppercase font-bold text-emerald-500">Я 2.0</div>
-                                                {node.content.futureSelfData?.horizon?.targetDate ? (
-                                                    <div className="text-[8px] text-emerald-600 font-mono mt-0.5 font-bold bg-white/50 dark:bg-slate-800/50 px-1 rounded">
-                                                        До: {new Date(node.content.futureSelfData.horizon.targetDate).toLocaleDateString()}
-                                                    </div>
-                                                ) : null}
-                                                {node.content.futureSelfData?.identity?.tags && node.content.futureSelfData.identity.tags.length > 0 && (
-                                                    <div className="flex flex-wrap justify-center gap-0.5 mt-1.5 w-full">
-                                                        {node.content.futureSelfData.identity.tags.slice(0, 3).map(tag => (
-                                                            <span key={tag} className="text-[7px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-1 py-0.2 rounded border border-emerald-200 dark:border-emerald-800 truncate max-w-[40px]">{tag}</span>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                        {(node.type === MapNodeType.GOAL || node.type === MapNodeType.STEP || node.type === MapNodeType.HABIT) && ( <div className="w-full h-1 bg-slate-100 dark:bg-slate-700 rounded-full mt-2 overflow-hidden"><div className={`h-full ${health === MapNodeHealth.HEALTHY ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{width: `${progress}%`}} /></div> )}
+                                        {node.type === MapNodeType.FUTURE_SELF && ( <div className="flex flex-col items-center mt-1 w-full overflow-hidden"><div className="text-[9px] uppercase font-bold text-emerald-500">Я 2.0</div>{node.content.futureSelfData?.horizon?.targetDate ? ( <div className="text-[8px] text-emerald-600 font-mono mt-0.5 font-bold bg-white/50 dark:bg-slate-800/50 px-1 rounded">До: {new Date(node.content.futureSelfData.horizon.targetDate).toLocaleDateString()}</div> ) : null}{node.content.futureSelfData?.identity?.tags && node.content.futureSelfData.identity.tags.length > 0 && ( <div className="flex flex-wrap justify-center gap-0.5 mt-1.5 w-full">{node.content.futureSelfData.identity.tags.slice(0, 3).map(tag => ( <span key={tag} className="text-[7px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-1 py-0.2 rounded border border-emerald-200 dark:border-emerald-800 truncate max-w-[40px]">{tag}</span> ))}</div> )}</div> )}
+                                        {(node.type === MapNodeType.GOAL || node.type === MapNodeType.STEP || node.type === MapNodeType.HABIT || node.type === MapNodeType.QUANTITATIVE_PLAN) && ( <div className="w-full h-1 bg-slate-100 dark:bg-slate-700 rounded-full mt-2 overflow-hidden"><div className={`h-full ${health === MapNodeHealth.HEALTHY ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{width: `${progress}%`}} /></div> )}
                                         {node.type === MapNodeType.CURRENT_SELF && <div className="flex flex-col items-center mt-1"><div className="text-[9px] uppercase font-bold text-slate-400">Я Сейчас</div>{node.content.currentSelfData && <div className="text-[8px] text-indigo-500 font-mono mt-0.5">Energy: {node.content.currentSelfData.metrics.averageEnergy}%</div>}</div>}
                                     </>
                                 )}

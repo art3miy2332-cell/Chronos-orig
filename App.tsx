@@ -122,9 +122,7 @@ const App: React.FC = () => {
       setCurrentView('AUTH_LOGIN');
   };
 
-  // Wrapper for navigation to track "from where"
   const navigateTo = (view: ViewState) => {
-      // If current view is a main tab, save it as potential return point
       const mainTabs = ['DASHBOARD', 'LIFE_MAP', 'CALENDAR', 'TASKS', 'HABITS', 'CHECKLISTS', 'GOALS', 'AI_CHAT', 'SETTINGS'];
       if (typeof currentView === 'string' && mainTabs.includes(currentView)) {
           setPreviousMainView(currentView);

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { GoalEntity, GoalStatus, GoalKPI, KPIType, Priority, EnergyLevel, TaskEntity, TaskStatus, GoalType, RoadmapNode } from '../types';
+import { GoalEntity, GoalStatus, GoalKPI, KPIType, Priority, EnergyLevel, TaskEntity, TaskStatus, GoalType, RoadmapNode, PlanType, SpherePlanData } from '../types';
 import { Plan } from '../domain/models';
 import { useGoalDetailViewModel } from '../hooks/viewmodels';
 import { GoalRepository, TaskRepository } from '../data/repositories';
@@ -48,6 +48,19 @@ const getEnergyColor = (e: EnergyLevel) => {
         case EnergyLevel.MEDIUM: return 'text-amber-400';
         case EnergyLevel.LOW: return 'text-emerald-400';
     }
+};
+
+const getPlanDisplayLabel = (plan: Plan) => {
+    if (plan.type === PlanType.SPHERES && plan.structureJson) {
+        try {
+            const data: SpherePlanData = JSON.parse(plan.structureJson);
+            if (data.trackers && data.trackers.length > 0) {
+                return `Сферы: ${data.trackers.map(t => t.title).join(', ')}`;
+            }
+        } catch (e) {}
+        return "Трекер Сфер";
+    }
+    return plan.title;
 };
 
 // --- SUB-COMPONENTS ---
@@ -301,7 +314,7 @@ const PlanPickerModal: React.FC<{ plans: Plan[], onPick: (planId: string) => voi
                     {plans.length === 0 && <p className="text-slate-500 text-sm">No plans available.</p>}
                     {plans.map(plan => (
                         <button key={plan.id} onClick={() => onPick(plan.id)} className="w-full text-left p-3 rounded-xl bg-slate-800 hover:bg-indigo-900/30 border border-slate-700 hover:border-indigo-500 transition-all group">
-                            <div className="text-sm font-bold text-white group-hover:text-indigo-400">{plan.title}</div>
+                            <div className="text-sm font-bold text-white group-hover:text-indigo-400">{getPlanDisplayLabel(plan)}</div>
                             <div className="text-[10px] text-slate-500 mt-1 uppercase flex gap-2"><span>{plan.type}</span><span>{new Date(plan.periodStart).toLocaleDateString()}</span></div>
                         </button>
                     ))}
@@ -388,9 +401,9 @@ export const GoalBlueprint: React.FC<{
         if (!draggingTaskId) return;
 
         const element = document.elementFromPoint(e.clientX, e.clientY);
-        const targetTaskEl = element?.closest('[data-task-id]');
-        if (targetTaskEl) {
-            const overId = targetTaskEl.getAttribute('data-task-id');
+        const targetNodeEl = element?.closest('[data-task-id]');
+        if (targetNodeEl) {
+            const overId = targetNodeEl.getAttribute('data-task-id');
             if (overId && overId !== draggingTaskId) {
                 setDropOverTaskId(overId);
             }
@@ -463,8 +476,25 @@ export const GoalBlueprint: React.FC<{
     const handleDeleteKPI = async (kpiId: string) => { if (!goal) return; if (!window.confirm("Delete KPI?")) return; await updateGoal({ kpis: goal.kpis.filter(k => k.id !== kpiId) }); };
     const handleReportClick = async () => { await generateReport(); setShowReportModal(true); };
     const handleSaveEdit = async (updates: Partial<GoalEntity>) => { await updateGoal(updates); setIsEditing(false); };
-    const handlePlanLink = async (planId: string) => { if (linkingStageId) { await linkPlanToStage(linkingStageId, planId); setLinkingStageId(null); } };
-    const handleNavigateToPlan = (planId: string) => { const plan = availablePlans.find(p => p.id === planId); if (plan) onNavigate({ type: 'PLAN_EDITOR', planId: plan.id, planType: plan.type, periodStart: plan.periodStart }); };
+    
+    const handlePlanLink = async (planId: string) => { 
+        if (linkingStageId) { 
+            await linkPlanToStage(linkingStageId, planId); 
+            setLinkingStageId(null); 
+        } 
+    };
+
+    const handlePlanUnlink = async (stageId: string, planId: string) => {
+        if (window.confirm("Отвязать этот план от этапа?")) {
+            await unlinkPlanFromStage(stageId, planId);
+        }
+    };
+
+    const handleNavigateToPlan = (planId: string) => { 
+        const plan = availablePlans.find(p => p.id === planId); 
+        if (plan) onNavigate({ type: 'PLAN_EDITOR', planId: plan.id, planType: plan.type, periodStart: plan.periodStart }); 
+    };
+
     const handleShowInMap = () => { if (!goal) return; onNavigate({ type: 'LIFE_MAP', focusGoalId: goal.id }); };
 
     if (loading || !goal) return <div className="h-full bg-slate-950 flex items-center justify-center text-slate-500">Loading Goal...</div>;
@@ -534,7 +564,11 @@ export const GoalBlueprint: React.FC<{
                             const doneCount = stageTasks.filter(t => t.status === TaskStatus.DONE).length;
                             const isDone = stageTasks.length > 0 && doneCount === stageTasks.length;
                             const stageKPIs = goal.kpis.filter(k => k.stageId === stage.id);
-                            const linkedPlan = availablePlans.find(p => p.id === stage.linkedPlanId);
+                            
+                            // Map linked IDs to actual Plan objects
+                            const linkedPlans = (stage.linkedPlanIds || [])
+                                .map(id => availablePlans.find(p => p.id === id))
+                                .filter(Boolean) as Plan[];
                             
                             return (
                                 <div key={stage.id} className="relative pl-6 animate-in slide-in-from-left-4" style={{animationDelay: `${index * 100}ms`}}>
@@ -558,17 +592,38 @@ export const GoalBlueprint: React.FC<{
                                                 {!isDone && (
                                                     <button onClick={() => handleCompleteStage(stage.id)} className="text-[10px] font-bold px-2 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/30 transition-colors flex items-center gap-1"> <Check size={12} /> OK </button>
                                                 )}
-                                                {!stage.linkedPlanId ? (
-                                                    <button onClick={() => setLinkingStageId(stage.id)} className="text-slate-500 hover:text-indigo-400 transition-colors p-2 rounded-full hover:bg-white/5"><Link size={16} /></button>
-                                                ) : (
-                                                    <button onClick={() => unlinkPlanFromStage(stage.id)} className="text-emerald-500 hover:text-rose-500 transition-colors p-2 rounded-full hover:bg-white/5"><Link size={16} /></button>
-                                                )}
+                                                <button onClick={() => setLinkingStageId(stage.id)} className="text-slate-500 hover:text-indigo-400 transition-colors p-2 rounded-full hover:bg-white/5">
+                                                    <Link size={16} />
+                                                </button>
                                             </div>
                                         </div>
 
-                                        {linkedPlan && (
-                                            <div onClick={() => handleNavigateToPlan(linkedPlan.id)} className="bg-indigo-900/30 border-b border-indigo-500/20 p-3 flex items-center justify-between cursor-pointer hover:bg-indigo-900/50 transition-colors group/plan">
-                                                <div className="flex items-center gap-2"> <FileText size={16} className="text-indigo-400" /> <div> <div className="text-xs font-bold text-indigo-300 uppercase">{linkedPlan.type} Plan</div> <div className="text-sm font-medium text-white">{linkedPlan.title}</div> </div> </div> <ArrowRight size={16} className="text-indigo-500 group-hover/plan:translate-x-1 transition-transform" />
+                                        {/* Linked Plans Section */}
+                                        {linkedPlans.length > 0 && (
+                                            <div className="p-2 space-y-1 bg-indigo-950/20 border-b border-slate-800/50">
+                                                <div className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest px-2 py-1">Привязанные планы</div>
+                                                {linkedPlans.map(plan => (
+                                                    <div key={plan.id} className="flex items-center justify-between p-2 rounded-xl bg-slate-800/40 hover:bg-slate-800/60 border border-white/5 transition-colors group/plan-link">
+                                                        <button 
+                                                            onClick={() => handleNavigateToPlan(plan.id)}
+                                                            className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                                                        >
+                                                            <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 shrink-0">
+                                                                <FileText size={12} />
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <div className="text-[10px] font-medium text-white truncate">{getPlanDisplayLabel(plan)}</div>
+                                                                <div className="text-[8px] text-slate-500 uppercase">{plan.type}</div>
+                                                            </div>
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handlePlanUnlink(stage.id, plan.id)}
+                                                            className="p-1.5 text-slate-500 hover:text-rose-500 transition-colors opacity-70 hover:opacity-100 hover:bg-rose-500/10 rounded-lg"
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
 
@@ -642,7 +697,7 @@ export const GoalBlueprint: React.FC<{
             </div>
 
             <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-slate-950 via-slate-950 to-transparent z-30 pb-safe pt-10 flex gap-3">
-                <button onClick={handleStartSession} className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-95"><Play size={20} fill="currentColor" /> Старт сессии</button>
+                <button onClick={handleStartSession} className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2 transition-all active:scale-95"><Play size={20} fill="currentColor" /> Старт сессии</button>
                 <div className="flex gap-2">
                     <button onClick={() => setIsEditing(true)} className="w-14 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl flex items-center justify-center transition-colors"><Edit2 size={20} /></button>
                     <button onClick={handleDeleteGoal} className="w-14 bg-slate-800 hover:bg-rose-900/50 text-slate-300 hover:text-rose-500 rounded-2xl flex items-center justify-center transition-colors"><Trash2 size={20} /></button>

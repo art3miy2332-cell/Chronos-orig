@@ -1,3 +1,4 @@
+
 import { TaskRepository, SuggestionRepository, SessionRepository, HabitRepository, PlanRepository, ChatRepository, TagRepository, GoalRepository, MapRepository } from '../data/repositories';
 import { Task, Session, Suggestion, RepoResult, Result, Habit, Plan, PlanEntry } from './models';
 // Added SyncMeta to imports
@@ -371,7 +372,7 @@ export class AddStageToGoalUseCase {
     async execute(goalId: string, title: string): Promise<RepoResult<void>> {
         const goal = GoalRepository.getById(goalId);
         if (!goal) return Result.notFound("Goal not found");
-        const newStage: RoadmapNode = { id: crypto.randomUUID(), title: title.trim(), completed: false };
+        const newStage: RoadmapNode = { id: crypto.randomUUID(), title: title.trim(), completed: false, linkedPlanIds: [] };
         goal.roadmap.push(newStage);
         goal.updatedAt = Date.now();
         GoalRepository.update(goal);
@@ -482,6 +483,48 @@ export class RecalculateMapProgressUseCase {
     }
 }
 
+export class LinkPlanToStageUseCase {
+    async execute(goalId: string, stageId: string, planId: string): Promise<RepoResult<void>> {
+        const goal = GoalRepository.getById(goalId);
+        if (!goal) return Result.notFound("Goal not found");
+        
+        const updatedRoadmap = goal.roadmap.map(r => {
+            if (r.id === stageId) {
+                const currentIds = r.linkedPlanIds || [];
+                if (!currentIds.includes(planId)) {
+                    return { ...r, linkedPlanIds: [...currentIds, planId] };
+                }
+            }
+            return r;
+        });
+        
+        goal.roadmap = updatedRoadmap;
+        goal.updatedAt = Date.now();
+        GoalRepository.update(goal);
+        return Result.success(undefined);
+    }
+}
+
+export class UnlinkPlanFromStageUseCase {
+    async execute(goalId: string, stageId: string, planId: string): Promise<RepoResult<void>> {
+        const goal = GoalRepository.getById(goalId);
+        if (!goal) return Result.notFound("Goal not found");
+        
+        const updatedRoadmap = goal.roadmap.map(r => {
+            if (r.id === stageId) {
+                const currentIds = r.linkedPlanIds || [];
+                return { ...r, linkedPlanIds: currentIds.filter(id => id !== planId) };
+            }
+            return r;
+        });
+        
+        goal.roadmap = updatedRoadmap;
+        goal.updatedAt = Date.now();
+        GoalRepository.update(goal);
+        return Result.success(undefined);
+    }
+}
+
 // --- RE-EXPORT INSTANCES ---
 
 export const UseCases = {
@@ -526,7 +569,9 @@ export const UseCases = {
     linkGoalToMap: new LinkGoalToMapUseCase(),
     unlinkGoalFromMap: new UnlinkGoalFromMapUseCase(),
     syncGoalToNodes: new SyncGoalToNodesUseCase(),
-    recalculateMapProgress: new RecalculateMapProgressUseCase()
+    recalculateMapProgress: new RecalculateMapProgressUseCase(),
+    linkPlanToStage: new LinkPlanToStageUseCase(),
+    unlinkPlanFromStage: new UnlinkPlanFromStageUseCase()
 };
 
 // Fixed: createMeta now correctly refers to imported SyncMeta

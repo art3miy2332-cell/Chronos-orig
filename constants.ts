@@ -295,9 +295,10 @@ export const LABELS = {
         useToken: "Use Token",
 
         // Checklists & AI Drafts
-        checklistsTitle: "Weekly & Monthly Plans",
-        weeklyPlan: "Weekly Plan",
-        monthlyPlan: "Monthly Plan",
+        checklistsTitle: "Plans",
+        weeklyPlan: "Weekly",
+        monthlyPlan: "Monthly",
+        spherePlan: "Spheres",
         generateAiDraft: "AI Draft",
         aiDrafts: "AI Suggestions",
         suggestionLog: "Suggestion Log",
@@ -452,9 +453,10 @@ export const LABELS = {
         useToken: "Использовать токен",
 
         // Checklists & AI Drafts
-        checklistsTitle: "Еженедельные планы",
-        weeklyPlan: "План на неделю",
-        monthlyPlan: "План на месяц",
+        checklistsTitle: "Планы",
+        weeklyPlan: "Неделя",
+        monthlyPlan: "Месяц",
+        spherePlan: "Сферы",
         generateAiDraft: "AI Драфт",
         aiDrafts: "Предложения AI",
         suggestionLog: "История предложений",

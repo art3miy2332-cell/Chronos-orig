@@ -1,8 +1,9 @@
 
 import React, { useState } from 'react';
-import { PlanType, WeeklyPlanData } from '../types';
-import { useChecklistViewModel } from '../hooks/viewmodels';
-import { Calendar, ChevronLeft, ChevronRight, Edit3, Bot, CheckSquare, Square, FileText, PieChart, Target, Zap, Activity, X, TrendingUp, AlertTriangle, MessageSquare, LayoutList, FlaskConical, XCircle } from 'lucide-react';
+import { PlanType, WeeklyPlanData, SpherePlanData, SphereTracker } from '../types';
+import { useChecklistViewModel, useHabitsViewModel } from '../hooks/viewmodels';
+import { Calendar, ChevronLeft, ChevronRight, Edit3, Bot, CheckSquare, Square, FileText, PieChart, Target, Zap, Activity, X, TrendingUp, AlertTriangle, MessageSquare, LayoutList, FlaskConical, XCircle, Grid, Layers } from 'lucide-react';
+import { SpherePlanView } from './SpherePlanView';
 
 interface ChecklistsProps {
     userId: string;
@@ -43,7 +44,7 @@ const BasicReviewModal: React.FC<{
                         <p className="text-sm font-medium leading-tight">"{card.mainCritique}"</p>
                     </div>
 
-                    {/* Stats Grid with Unlimited Scroll */}
+                    {/* Stats Grid */}
                     <div className="grid grid-cols-2 gap-3">
                         <div className="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl border border-emerald-100 dark:border-emerald-800 flex flex-col max-h-48">
                             <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1 mb-2 shrink-0">
@@ -86,13 +87,16 @@ export const Checklists: React.FC<ChecklistsProps> = ({ userId, onNavigate, labe
         setPlanType, nextPeriod, prevPeriod, generateBasicReview, savePlan 
     } = useChecklistViewModel(userId);
 
+    const { habits, decrementHabit } = useHabitsViewModel(userId);
+
     const [isReviewing, setIsReviewing] = useState(false);
     const [reviewData, setReviewData] = useState<any>(null);
 
     const formatDateRange = () => {
+        if (planType === PlanType.SPHERES) return "Трекер Сфер";
         const start = new Date(periodStart);
         if (planType === PlanType.WEEKLY) {
-            const end = new Date(periodStart + 604800000 - 86400000); // +6 days
+            const end = new Date(periodStart + 604800000 - 86400000); 
             return `${start.getDate()} ${start.toLocaleString('ru', { month: 'short' })} - ${end.getDate()} ${end.toLocaleString('ru', { month: 'short' })}`;
         } else {
             return start.toLocaleString('ru', { month: 'long', year: 'numeric' });
@@ -119,21 +123,15 @@ export const Checklists: React.FC<ChecklistsProps> = ({ userId, onNavigate, labe
         if (data && data.reviewCard) {
             setReviewData(data);
         } else {
-            alert("Не удалось сгенерировать обзор. Возможно, план недостаточно заполнен для анализа.");
+            alert("Не удалось сгенерировать обзор.");
         }
         setIsReviewing(false);
     };
 
     const handleDeepDive = () => {
         setReviewData(null);
-        // Pass the raw plan structure to the Chat for detailed analysis
         const payload = plan?.structureJson || null;
-        
-        onNavigate({ 
-            type: 'AI_CHAT', 
-            scenario: 'DEEP_PLAN_REVIEW',
-            payload: payload
-        });
+        onNavigate({ type: 'AI_CHAT', scenario: 'DEEP_PLAN_REVIEW', payload: payload });
     };
 
     const handleToggleTask = async (focusId: string, taskId: string) => {
@@ -149,16 +147,14 @@ export const Checklists: React.FC<ChecklistsProps> = ({ userId, onNavigate, labe
                     await savePlan(updatedPlan, entries);
                 }
             }
-        } catch (e) {
-            console.error("Failed to toggle task", e);
-        }
+        } catch (e) {}
     };
 
     const handleToggleGeneralTask = async (taskId: string) => {
         if (!plan || !plan.structureJson) return;
         try {
             const data: any = JSON.parse(plan.structureJson);
-            if (data.generalTasks) { // Monthly Schema
+            if (data.generalTasks) {
                 const task = data.generalTasks.find((t: any) => t.id === taskId);
                 if (task) {
                     task.isDone = !task.isDone;
@@ -166,9 +162,7 @@ export const Checklists: React.FC<ChecklistsProps> = ({ userId, onNavigate, labe
                     await savePlan(updatedPlan, entries);
                 }
             }
-        } catch (e) {
-            console.error("Failed to toggle general task", e);
-        }
+        } catch (e) {}
     };
 
     const handleToggleKPI = async (kpiId: string) => {
@@ -181,39 +175,22 @@ export const Checklists: React.FC<ChecklistsProps> = ({ userId, onNavigate, labe
                 const updatedPlan = { ...plan, structureJson: JSON.stringify(data), updatedAt: Date.now() };
                 await savePlan(updatedPlan, entries);
             }
-        } catch (e) {
-            console.error("Failed to toggle KPI", e);
-        }
+        } catch (e) {}
     };
 
-    const handleKPIProgress = async (kpiId: string, value: number) => {
-        if (isNaN(value)) return;
+    const handleUpdateTracker = async (trackerId: string, updates: Partial<SphereTracker>) => {
         if (!plan || !plan.structureJson) return;
         try {
-            const data: WeeklyPlanData = JSON.parse(plan.structureJson);
-            const kpi = data.kpis.find(k => k.id === kpiId);
-            if (kpi) {
-                kpi.current = value;
-                // Optional: Auto-mark as done if target met
-                if (kpi.target > 0 && value >= kpi.target) {
-                    kpi.isDone = true;
-                }
-                const updatedPlan = { ...plan, structureJson: JSON.stringify(data), updatedAt: Date.now() };
-                await savePlan(updatedPlan, entries);
-            }
-        } catch (e) {
-            console.error("Failed to update KPI progress", e);
-        }
+            const data: SpherePlanData = JSON.parse(plan.structureJson);
+            data.trackers = data.trackers.map(t => t.id === trackerId ? { ...t, ...updates } : t);
+            const updatedPlan = { ...plan, structureJson: JSON.stringify(data), updatedAt: Date.now() };
+            await savePlan(updatedPlan, []);
+        } catch(e) {}
     };
 
-    // Helper to parse structured plan if available
     let structuredPlan: any = null;
     if (plan && plan.structureJson) {
-        try {
-            structuredPlan = JSON.parse(plan.structureJson);
-        } catch (e) {
-            // ignore
-        }
+        try { structuredPlan = JSON.parse(plan.structureJson); } catch (e) {}
     }
 
     return (
@@ -223,258 +200,78 @@ export const Checklists: React.FC<ChecklistsProps> = ({ userId, onNavigate, labe
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-white">{labels.checklistsTitle}</h2>
                     <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
-                        <button 
-                            onClick={() => setPlanType(PlanType.WEEKLY)}
-                            className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${planType === PlanType.WEEKLY ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500'}`}
-                        >
-                            Неделя
-                        </button>
-                        <button 
-                            onClick={() => setPlanType(PlanType.MONTHLY)}
-                            className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${planType === PlanType.MONTHLY ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500'}`}
-                        >
-                            Месяц
-                        </button>
+                        <button onClick={() => setPlanType(PlanType.WEEKLY)} className={`px-2 py-1 text-[10px] font-bold rounded-md transition-colors ${planType === PlanType.WEEKLY ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500'}`}>{labels.weeklyPlan}</button>
+                        <button onClick={() => setPlanType(PlanType.MONTHLY)} className={`px-2 py-1 text-[10px] font-bold rounded-md transition-colors ${planType === PlanType.MONTHLY ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500'}`}>{labels.monthlyPlan}</button>
+                        <button onClick={() => setPlanType(PlanType.SPHERES)} className={`px-2 py-1 text-[10px] font-bold rounded-md transition-colors ${planType === PlanType.SPHERES ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500'}`}>{labels.spherePlan}</button>
                     </div>
                 </div>
                 
                 <div className="flex items-center justify-between">
-                    <button onClick={prevPeriod} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white"><ChevronLeft size={20} /></button>
-                    <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Calendar size={16} className="text-indigo-500" />
-                        {formatDateRange()}
-                    </div>
-                    <button onClick={nextPeriod} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white"><ChevronRight size={20} /></button>
+                    {planType !== PlanType.SPHERES ? (
+                        <>
+                            <button onClick={prevPeriod} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white"><ChevronLeft size={20} /></button>
+                            <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <Calendar size={16} className="text-indigo-500" />
+                                {formatDateRange()}
+                            </div>
+                            <button onClick={nextPeriod} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white"><ChevronRight size={20} /></button>
+                        </>
+                    ) : (
+                        <div className="flex items-center gap-2 px-2 py-1 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-lg">
+                            <Grid size={16} />
+                            <span className="text-sm font-bold uppercase tracking-wider">Количественные планы</span>
+                        </div>
+                    )}
                 </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {/* AI & Edit CTA - Optimized grid for potential text overflow */}
-                <div className="grid grid-cols-3 gap-2">
-                    <button 
-                        onClick={handleGenerateAI}
-                        className="p-3 bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/20 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform overflow-hidden"
-                    >
-                        <Bot size={20} className="shrink-0" />
-                        <span className="text-[9px] font-bold uppercase tracking-tighter text-center leading-tight w-full break-words">
-                            {labels.generateAiDraft || "AI Draft"}
-                        </span>
-                    </button>
-                    <button 
-                        onClick={handleEdit}
-                        className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl shadow-sm flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform hover:border-indigo-500 overflow-hidden"
-                    >
-                        <Edit3 size={20} className="shrink-0" />
-                        <span className="text-[9px] font-bold uppercase tracking-tighter text-center leading-tight w-full break-words">
-                            {labels.builder || "Constructor"}
-                        </span>
-                    </button>
-                    <button 
-                        onClick={handleReviewClick}
-                        disabled={!plan || isReviewing}
-                        className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-xl shadow-sm flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform hover:border-emerald-500 disabled:opacity-50 overflow-hidden"
-                    >
-                        {isReviewing ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-emerald-600 border-t-transparent shrink-0" /> : <PieChart size={20} className="shrink-0" />}
-                        <span className="text-[9px] font-bold uppercase tracking-tighter text-center leading-tight w-full break-words">
-                            {labels.review || "Review"}
-                        </span>
-                    </button>
-                </div>
+                {planType !== PlanType.SPHERES && (
+                    <div className="grid grid-cols-3 gap-2">
+                        <button onClick={handleGenerateAI} className="p-3 bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform"><Bot size={20} /><span className="text-[9px] font-bold uppercase tracking-tighter">{labels.generateAiDraft}</span></button>
+                        <button onClick={handleEdit} className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl shadow-sm flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform"><Edit3 size={20} /><span className="text-[9px] font-bold uppercase tracking-tighter">{labels.builder}</span></button>
+                        <button onClick={handleReviewClick} disabled={!plan || isReviewing} className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-xl shadow-sm flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform disabled:opacity-50">{isReviewing ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-emerald-600 border-t-transparent" /> : <PieChart size={20} />}<span className="text-[9px] font-bold uppercase tracking-tighter">{labels.review}</span></button>
+                    </div>
+                )}
 
-                {/* Plan Content */}
                 {loading ? (
-                    <div className="text-center py-10 text-slate-400">Загрузка плана...</div>
+                    <div className="text-center py-10 text-slate-400">Загрузка...</div>
+                ) : planType === PlanType.SPHERES ? (
+                    <SpherePlanView 
+                        userId={userId} 
+                        plan={plan} 
+                        habits={habits} 
+                        onEdit={handleEdit} 
+                        onUpdateTracker={handleUpdateTracker}
+                        onHabitDecrement={decrementHabit}
+                        labels={labels}
+                    />
                 ) : !plan ? (
                      <div className="text-center py-12 opacity-50 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
                         <FileText size={48} className="mx-auto mb-3 text-slate-300" />
                         <p className="text-slate-500">Нет плана на этот период.</p>
-                        <p className="text-xs text-slate-400">Нажми "AI Драфт" или "Конструктор".</p>
                      </div>
-                ) : structuredPlan ? (
-                    // RENDER STRUCTURED PLAN PREVIEW
+                ) : (
                     <div className="space-y-4 animate-in fade-in">
                         <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
-                             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1"><Target size={12} /> {labels.mainGoal || "Main Goal"}</div>
-                             <h3 className="font-bold text-lg text-slate-900 dark:text-white leading-tight">{structuredPlan.mainGoal}</h3>
+                             <div className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><Target size={12} /> {labels.mainGoal}</div>
+                             <h3 className="font-bold text-lg text-slate-900 dark:text-white leading-tight">{structuredPlan?.mainGoal || plan.title}</h3>
                         </div>
-
-                        <div className="space-y-3">
-                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider pl-1">
-                                {planType === PlanType.MONTHLY ? "Стратегические Фокусы" : (labels.focusAreas || "Focus Areas")}
-                            </h4>
-                            {structuredPlan.focuses && structuredPlan.focuses.map((focus: any) => (
-                                <div key={focus.id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
-                                    <div className="p-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                                        <span className="font-bold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                            <Zap size={14} className="text-indigo-500" /> {focus.title}
-                                        </span>
-                                        <span className="text-xs text-slate-400">{focus.tasks.filter((t: any) => t.isDone).length}/{focus.tasks.length}</span>
-                                    </div>
-                                    <div className="p-3 space-y-2">
-                                        {focus.tasks.length === 0 && <span className="text-xs text-slate-400 italic">Нет задач</span>}
-                                        {focus.tasks.map((task: any) => (
-                                            <div key={task.id} className="flex items-center gap-2 text-sm group">
-                                                <button 
-                                                    onClick={() => handleToggleTask(focus.id, task.id)}
-                                                    className={`transition-colors ${task.isDone ? 'text-emerald-500' : 'text-slate-300 group-hover:text-indigo-500'}`}
-                                                >
-                                                    {task.isDone ? <CheckSquare size={18} /> : <Square size={18} />}
-                                                </button>
-                                                <span className={`transition-colors ${task.isDone ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}>
-                                                    {task.title}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Monthly Plan Specific: General Tasks */}
-                        {structuredPlan.generalTasks && structuredPlan.generalTasks.length > 0 && (
-                            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
-                                <div className="p-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                        <LayoutList size={14} className="text-indigo-500" /> {labels.generalTasks || "General Tasks"}
-                                    </span>
-                                    <span className="text-xs text-slate-400">
-                                        {structuredPlan.generalTasks.filter((t:any) => t.isDone).length}/{structuredPlan.generalTasks.length}
-                                    </span>
-                                </div>
+                        {structuredPlan?.focuses?.map((focus: any) => (
+                            <div key={focus.id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+                                <div className="p-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center"><span className="font-bold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2"><Zap size={14} className="text-indigo-500" /> {focus.title}</span><span className="text-xs text-slate-400">{focus.tasks.filter((t: any) => t.isDone).length}/{focus.tasks.length}</span></div>
                                 <div className="p-3 space-y-2">
-                                    {structuredPlan.generalTasks.map((task: any) => (
-                                        <div key={task.id} className="flex items-center gap-2 text-sm group">
-                                            <button 
-                                                onClick={() => handleToggleGeneralTask(task.id)}
-                                                className={`transition-colors ${task.isDone ? 'text-emerald-500' : 'text-slate-300 group-hover:text-indigo-500'}`}
-                                            >
-                                                {task.isDone ? <CheckSquare size={18} /> : <Square size={18} />}
-                                            </button>
-                                            <span className={`transition-colors ${task.isDone ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}>
-                                                {task.title}
-                                            </span>
-                                        </div>
+                                    {focus.tasks.map((task: any) => (
+                                        <div key={task.id} className="flex items-center gap-2 text-sm group"><button onClick={() => handleToggleTask(focus.id, task.id)} className={`transition-colors ${task.isDone ? 'text-emerald-500' : 'text-slate-300 group-hover:text-indigo-500'}`}>{task.isDone ? <CheckSquare size={18} /> : <Square size={18} />}</button><span className={`transition-colors ${task.isDone ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}>{task.title}</span></div>
                                     ))}
                                 </div>
                             </div>
-                        )}
-
-                        {/* Monthly Plan Specific: Experiments */}
-                        {structuredPlan.experiences && structuredPlan.experiences.length > 0 && (
-                            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 rounded-xl border border-indigo-200 dark:border-indigo-800 p-4">
-                                <h4 className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-3 flex items-center gap-1">
-                                    <FlaskConical size={12} /> Эксперименты
-                                </h4>
-                                <div className="space-y-3">
-                                    {structuredPlan.experiences.map((exp: any) => (
-                                        <div key={exp.id} className="bg-white/80 dark:bg-black/20 p-3 rounded-lg border border-indigo-100 dark:border-indigo-800/50">
-                                            <div className="font-bold text-sm text-slate-800 dark:text-slate-200">{exp.title}</div>
-                                            <div className="text-xs text-slate-500 mt-1 italic">"{exp.hypothesis}"</div>
-                                            <div className="flex gap-2 mt-2">
-                                                <span className="text-[10px] bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-indigo-100 dark:border-indigo-900 text-indigo-600 dark:text-indigo-400 font-medium">
-                                                    KPI: {exp.kpiMetric}
-                                                </span>
-                                                <span className="text-[10px] bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-indigo-100 dark:border-indigo-900 text-slate-500">
-                                                    Цель: {exp.kpiTarget}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Monthly Plan Specific: Barriers/Drops */}
-                        {structuredPlan.barriers && structuredPlan.barriers.length > 0 && (
-                            <div className="bg-rose-50 dark:bg-rose-900/10 p-4 rounded-xl border border-rose-100 dark:border-rose-900/30">
-                                <h4 className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-3 flex items-center gap-1">
-                                    <XCircle size={12} /> Барьеры / От чего отказаться
-                                </h4>
-                                <ul className="space-y-2">
-                                    {structuredPlan.barriers.filter((b: string) => b.trim()).map((barrier: string, i: number) => (
-                                        <li key={i} className="flex items-start gap-2 text-sm text-rose-700 dark:text-rose-300 leading-snug">
-                                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
-                                            {barrier}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-
-                        {structuredPlan.kpis && structuredPlan.kpis.length > 0 && (
-                            <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
-                                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1"><Activity size={12} /> KPIs</h4>
-                                <div className="space-y-2">
-                                    {structuredPlan.kpis.map((kpi: any) => (
-                                        <div key={kpi.id} className="flex justify-between items-center text-sm group">
-                                            <div className="flex items-center gap-3">
-                                                <button 
-                                                    onClick={() => handleToggleKPI(kpi.id)}
-                                                    className={`transition-colors ${kpi.isDone ? 'text-emerald-500' : 'text-slate-300 group-hover:text-indigo-500'}`}
-                                                >
-                                                    {kpi.isDone ? <CheckSquare size={18} /> : <Square size={18} />}
-                                                </button>
-                                                <span className={`${kpi.isDone ? 'text-slate-400 line-through' : 'text-slate-700 dark:text-slate-300'}`}>{kpi.title}</span>
-                                            </div>
-                                            <div className={`flex items-center gap-1 font-mono font-bold ${kpi.isDone ? 'text-emerald-500' : 'text-slate-900 dark:text-white'}`}>
-                                                <input
-                                                    type="number"
-                                                    defaultValue={kpi.current}
-                                                    onBlur={(e) => handleKPIProgress(kpi.id, parseFloat(e.target.value))}
-                                                    onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-                                                    className="w-10 bg-transparent text-right outline-none border-b border-dashed border-slate-300 dark:border-slate-600 focus:border-indigo-500 transition-colors p-0"
-                                                />
-                                                <span className="opacity-60 text-xs">/ {kpi.target} {kpi.unit}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    // LEGACY FLAT LIST FALLBACK
-                    <div className="space-y-4">
-                        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
-                            <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-1">{plan.title}</h3>
-                            <div className="text-xs text-slate-400 uppercase tracking-wider">{entries.length} Пунктов</div>
-                        </div>
-
-                        <div className="space-y-2">
-                            {entries.map(entry => (
-                                <div key={entry.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex gap-3 items-start">
-                                    <div className={`mt-0.5 ${entry.status === 'DONE' ? 'text-emerald-500' : 'text-slate-300'}`}>
-                                        {entry.status === 'DONE' ? <CheckSquare size={20} /> : <Square size={20} />}
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex justify-between items-start mb-1">
-                                            <span className={`font-medium ${entry.status === 'DONE' ? 'line-through text-slate-400' : 'text-slate-900 dark:text-white'}`}>
-                                                {entry.content}
-                                            </span>
-                                            <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded">
-                                                {entry.category}
-                                            </span>
-                                        </div>
-                                        {entry.userNote && (
-                                            <p className="text-xs text-slate-500 italic mt-1">{entry.userNote}</p>
-                                        )}
-                                        {entry.status === 'DRAFT' && (
-                                            <span className="inline-block mt-2 text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-bold">DRAFT</span>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                        ))}
                     </div>
                 )}
             </div>
 
-            <BasicReviewModal 
-                isOpen={!!reviewData} 
-                data={reviewData} 
-                onClose={() => setReviewData(null)}
-                onDeepDive={handleDeepDive}
-            />
+            <BasicReviewModal isOpen={!!reviewData} data={reviewData} onClose={() => setReviewData(null)} onDeepDive={handleDeepDive} />
         </div>
     );
 };

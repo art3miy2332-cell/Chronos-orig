@@ -31,7 +31,22 @@ export enum SuggestionStatus {
 export enum PlanType {
     DAILY = 'DAILY',
     WEEKLY = 'WEEKLY',
-    MONTHLY = 'MONTHLY'
+    MONTHLY = 'MONTHLY',
+    SPHERES = 'SPHERES'
+}
+
+export interface SphereTracker {
+    id: string;
+    title: string;
+    targetCount: number;
+    habitId?: string | null;
+    startDate: number;
+    endDate: number;
+    manualIndices: number[]; // Хранит индексы конкретных закрашенных ячеек
+}
+
+export interface SpherePlanData {
+    trackers: SphereTracker[];
 }
 
 export enum GoalStatus {
@@ -60,7 +75,8 @@ export enum MapNodeType {
     CURRENT_SELF = 'CURRENT_SELF',
     FUTURE_SELF = 'FUTURE_SELF',
     NOTE = 'NOTE',
-    LIMITATION = 'LIMITATION'
+    LIMITATION = 'LIMITATION',
+    QUANTITATIVE_PLAN = 'QUANTITATIVE_PLAN'
 }
 
 export enum MapEdgeType {
@@ -307,7 +323,7 @@ export interface RoadmapNode {
     description?: string;
     deadline?: number;
     completed: boolean;
-    linkedPlanId?: string;
+    linkedPlanIds?: string[];
 }
 
 export interface GoalEntity {
@@ -369,6 +385,7 @@ export interface MapNodeEntity {
         goalId?: string;
         taskId?: string;
         habitId?: string;
+        sphereTrackerId?: string;
     };
     progressData?: MapNodeProgress;
     meta: SyncMeta;

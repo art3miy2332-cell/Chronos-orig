@@ -1,8 +1,9 @@
 
 import { 
     MapNodeEntity, MapEdgeEntity, MapNodeType, MapNodeProgress, MapNodeHealth,
-    TaskEntity, HabitEntity, TaskStatus, HabitFrequency 
+    TaskEntity, HabitEntity, TaskStatus, HabitFrequency, SpherePlanData, PlanType 
 } from '../types';
+import { DatabaseService } from './db';
 
 interface Context {
     tasks: TaskEntity[];
@@ -20,17 +21,14 @@ export const MapProgressService = {
         const context: Context = { nodes, edges, tasks, habits };
         const updatedNodes = [...nodes];
 
-        // 1. Calculate Leafs (STEPS, HABITS) first
-        // In a DAG, we should technically do topological sort, but for simplicity we iterate levels.
-        // We will implement a memoized recursive calculator.
-        
+        // 1. Calculate Leafs (STEPS, HABITS, QUANTITATIVE_PLAN) first
         const cache = new Map<string, MapNodeProgress>();
         const visiting = new Set<string>(); // Cycle detection
 
         const getProgress = (nodeId: string): MapNodeProgress => {
             if (cache.has(nodeId)) return cache.get(nodeId)!;
             
-            // Cycle detection: If we are currently visiting this node in the recursion stack, return placeholder
+            // Cycle detection
             if (visiting.has(nodeId)) {
                 return createEmptyProgress();
             }
@@ -46,15 +44,13 @@ export const MapProgressService = {
                 if (node.type === MapNodeType.STEP) {
                     progress = calculateStepProgress(node, context);
                 } else if (node.type === MapNodeType.HABIT) {
-                    // Standalone Habit Node
                     progress = calculateHabitNodeProgress(node, context);
+                } else if (node.type === MapNodeType.QUANTITATIVE_PLAN) {
+                    progress = calculateQuantitativePlanProgress(node, context);
                 } else if (node.type === MapNodeType.GOAL || node.type === MapNodeType.SUBGOAL) {
                     progress = calculateGoalProgress(node, context, getProgress);
                 } else if (node.type === MapNodeType.FUTURE_SELF) {
                     progress = calculateFutureSelfProgress(node, context, getProgress);
-                } else if (node.type === MapNodeType.NOTE) {
-                    // Notes do not contribute to progress
-                    progress = createEmptyProgress();
                 } else {
                     progress = createEmptyProgress();
                 }
@@ -86,10 +82,6 @@ function createEmptyProgress(): MapNodeProgress {
     };
 }
 
-/**
- * STEP PROGRESS
- * Binary logic based on Linked Task.
- */
 function calculateStepProgress(node: MapNodeEntity, ctx: Context): MapNodeProgress {
     let value = 0;
     let lastActivity = node.meta.createdAt;
@@ -98,7 +90,6 @@ function calculateStepProgress(node: MapNodeEntity, ctx: Context): MapNodeProgre
         const task = ctx.tasks.find(t => t.id === node.references.taskId);
         if (task) {
             value = task.status === TaskStatus.DONE ? 100 : 0;
-            // Use doneAt if done, otherwise updatedAt, otherwise createdAt
             lastActivity = task.doneAt || task.updatedAt || task.createdAt;
         }
     }
@@ -111,10 +102,6 @@ function calculateStepProgress(node: MapNodeEntity, ctx: Context): MapNodeProgre
     };
 }
 
-/**
- * HABIT NODE PROGRESS
- * Consistency Score (rolling 30 days).
- */
 function calculateHabitNodeProgress(node: MapNodeEntity, ctx: Context): MapNodeProgress {
     if (!node.references.habitId) return createEmptyProgress();
     
@@ -132,20 +119,49 @@ function calculateHabitNodeProgress(node: MapNodeEntity, ctx: Context): MapNodeP
     };
 }
 
-/**
- * GOAL PROGRESS (Aggregator)
- * Weighted average of:
- * 1. Children Nodes (60%)
- * 2. Direct Linked Tasks (20%)
- * 3. Linked Habits (20%)
- */
+function calculateQuantitativePlanProgress(node: MapNodeEntity, ctx: Context): MapNodeProgress {
+    if (!node.references.sphereTrackerId) return createEmptyProgress();
+    
+    // Find tracker in Sphere Plans
+    const plans = DatabaseService.plans.getAll().filter(p => p.type === PlanType.SPHERES);
+    let foundTracker = null;
+    
+    for (const plan of plans) {
+        if (plan.structureJson) {
+            try {
+                const data: SpherePlanData = JSON.parse(plan.structureJson);
+                const tracker = data.trackers.find(t => t.id === node.references.sphereTrackerId);
+                if (tracker) { foundTracker = tracker; break; }
+            } catch(e) {}
+        }
+    }
+
+    if (!foundTracker) return createEmptyProgress();
+
+    const habit = foundTracker.habitId ? ctx.habits.find(h => h.id === foundTracker!.habitId) : null;
+    const habitCredits = habit 
+        ? habit.history.filter(ts => ts >= foundTracker!.startDate && ts <= foundTracker!.endDate).length 
+        : 0;
+    
+    const totalFilled = (foundTracker.manualIndices?.length || 0) + habitCredits;
+    const progress = Math.min(100, Math.round((totalFilled / foundTracker.targetCount) * 100));
+    
+    const lastActivity = habit?.lastDoneAt || node.meta.createdAt;
+
+    return {
+        value: progress,
+        health: calculateHealth(lastActivity),
+        lastActivity,
+        metrics: { habitConsistency: 0, taskCompletion: 0, childrenProgress: 0 }
+    };
+}
+
 function calculateGoalProgress(
     node: MapNodeEntity, 
     ctx: Context, 
     getter: (id: string) => MapNodeProgress
 ): MapNodeProgress {
     
-    // 1. Children Nodes (Subgoals, Steps) - EXCLUDING NOTES
     const childEdges = ctx.edges.filter(e => e.sourceNodeId === node.id && (e.relationType === 'CAUSES' || e.relationType === 'LEADS_TO'));
     const childrenIds = childEdges.map(e => e.targetNodeId);
     
@@ -155,7 +171,6 @@ function calculateGoalProgress(
 
     childrenIds.forEach(childId => {
         const childNode = ctx.nodes.find(n => n.id === childId);
-        // Explicitly exclude NOTES from calculation
         if (childNode && childNode.type !== MapNodeType.NOTE) {
             const p = getter(childId);
             childrenSum += p.value;
@@ -166,19 +181,10 @@ function calculateGoalProgress(
 
     const childrenScore = childrenCount > 0 ? childrenSum / childrenCount : 0;
 
-    // 2. Direct Linked Tasks (not nodes, but tasks linked via ID ref in GoalEntity)
-    // Note: MapNode doesn't store task lists directly usually, but GoalEntity does.
-    // We need to look up GoalEntity to get linkedTasksIds if we want that precision.
-    // However, for Map logic, we usually rely on graph topology (Children Steps).
-    // Let's stick to GRAPH TOPOLOGY for simplicity + any tasks linked directly to this Node if mapped.
-    
-    // If the node represents a GoalEntity, we might want to check that entity.
-    let directTasksScore = 0;
     let habitsScore = 0;
     let habitsCount = 0;
 
     if (node.references.goalId) {
-        // Look up Habits linked to this Goal
         const goalHabits = ctx.habits.filter(h => h.goalId === node.references.goalId);
         habitsCount = goalHabits.length;
         if (habitsCount > 0) {
@@ -192,8 +198,6 @@ function calculateGoalProgress(
         }
     }
 
-    // WEIGHTS
-    // If no habits, redistribute weight to children
     const wChildren = habitsCount > 0 ? 0.7 : 1.0;
     const wHabits = habitsCount > 0 ? 0.3 : 0;
 
@@ -206,24 +210,17 @@ function calculateGoalProgress(
         metrics: {
             childrenProgress: childrenScore,
             habitConsistency: habitsScore,
-            taskCompletion: 0 // abstracted into children usually
+            taskCompletion: 0
         }
     };
 }
 
-/**
- * FUTURE SELF PROGRESS
- * Average of all top-level Goals connected to it.
- */
 function calculateFutureSelfProgress(
     node: MapNodeEntity, 
     ctx: Context, 
     getter: (id: string) => MapNodeProgress
 ): MapNodeProgress {
-    
-    // Incoming edges to Future Self (Goals leading to it)
     const incomingEdges = ctx.edges.filter(e => e.targetNodeId === node.id);
-    
     if (incomingEdges.length === 0) return createEmptyProgress();
 
     let sum = 0;
@@ -255,23 +252,14 @@ function calculateFutureSelfProgress(
 function calculateHabitConsistency(habit: HabitEntity): number {
     const now = Date.now();
     const thirtyDaysAgo = now - (30 * 86400000);
-    
-    // Count completions in window
     const hits = habit.history.filter(ts => ts >= thirtyDaysAgo).length;
-    
-    // Expected hits
-    // Daily: 30
-    // Weekly: 4
     const expected = habit.frequency === HabitFrequency.DAILY ? 30 : 4;
-    
-    // Cap at 100% (extra credit doesn't push > 100)
     return Math.min(100, Math.round((hits / expected) * 100));
 }
 
 function calculateHealth(lastActivityTs: number): MapNodeHealth {
     const now = Date.now();
     const diffDays = (now - lastActivityTs) / 86400000;
-
     if (diffDays <= 7) return MapNodeHealth.HEALTHY;
     if (diffDays <= 14) return MapNodeHealth.AT_RISK;
     return MapNodeHealth.STAGNANT;

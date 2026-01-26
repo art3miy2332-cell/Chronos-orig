@@ -1,7 +1,8 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
     TaskEntity, TagEntity, Priority, EnergyLevel, TaskStatus, RecurrenceRule, 
-    GoalEntity, HabitEntity, HabitFrequency, SuggestionEntity, SuggestionStatus, 
+    GoalEntity, HabitEntity, HabitFrequency, SuggestionStatus, SuggestionEntity,
     PlanType, PlanEntity, PlanEntryEntity, ChatThread, ChatMessage, 
     GoalReviewReport, GoalAnalysis, TimerState, FocusConfig, FocusMode, WeeklyPlanData,
     DailyInsight, WeeklyInsight, MonthlyInsight, GoalKPI, KPIType
@@ -223,8 +224,12 @@ export const useTaskEditViewModel = (userId: string, taskId?: string, initialTit
                 task.showOnDashboard
             );
         }
+        setSaving(true); // Should stay true during save process
+        if (res.success) {
+            setSaving(false);
+            return true;
+        }
         setSaving(false);
-        if (res.success) return true;
         setError(res.error?.message || "Save failed");
         return false;
     };
@@ -298,13 +303,50 @@ export const useHabitsViewModel = (userId: string) => {
     const markDone = async (id: string) => {
         const habit = habits.find(h => h.id === id);
         if (habit) {
-            const now = Date.now();
-            const updated = { ...habit, lastDoneAt: now, streak: habit.streak + 1, history: [...habit.history, now] };
+            const todayStart = new Date().setHours(0,0,0,0);
+            const isAlreadyDoneToday = habit.history.some(ts => new Date(ts).setHours(0,0,0,0) === todayStart);
+
+            let updated: HabitEntity;
+            if (isAlreadyDoneToday) {
+                // Если уже сделано сегодня - удаляем эту запись (toggle off)
+                const newHistory = habit.history.filter(ts => new Date(ts).setHours(0,0,0,0) !== todayStart);
+                updated = { 
+                    ...habit, 
+                    history: newHistory, 
+                    streak: Math.max(0, habit.streak - 1),
+                    lastDoneAt: newHistory.length > 0 ? Math.max(...newHistory) : undefined
+                };
+            } else {
+                // Если еще не сделано - добавляем запись (toggle on)
+                const now = Date.now();
+                updated = { 
+                    ...habit, 
+                    lastDoneAt: now, 
+                    streak: habit.streak + 1, 
+                    history: [...habit.history, now] 
+                };
+            }
+
             setHabits(habits.map(h => h.id === id ? updated : h));
-            
             const domHabit = HabitMapper.toDomain(updated);
             await HabitRepository.updateHabit(domHabit);
-            
+            if (habit.goalId) await UseCases.recalcGoalProgress.execute(habit.goalId);
+        }
+    };
+
+    const decrementHabit = async (id: string) => {
+        const habit = habits.find(h => h.id === id);
+        if (habit && habit.history.length > 0) {
+            const newHistory = [...habit.history];
+            newHistory.pop(); // Удаляем последнюю отметку
+            const updated: HabitEntity = {
+                ...habit,
+                history: newHistory,
+                streak: Math.max(0, habit.streak - 1),
+                lastDoneAt: newHistory.length > 0 ? Math.max(...newHistory) : undefined
+            };
+            setHabits(habits.map(h => h.id === id ? updated : h));
+            await HabitRepository.updateHabit(HabitMapper.toDomain(updated));
             if (habit.goalId) await UseCases.recalcGoalProgress.execute(habit.goalId);
         }
     };
@@ -314,7 +356,7 @@ export const useHabitsViewModel = (userId: string) => {
         refresh();
     };
 
-    return { habits, loading, markDone, deleteHabit };
+    return { habits, loading, markDone, decrementHabit, deleteHabit };
 };
 
 export const useHabitEditViewModel = (userId: string, habitId?: string) => {
@@ -334,7 +376,6 @@ export const useHabitEditViewModel = (userId: string, habitId?: string) => {
         if (habitId) {
             setLoading(true);
             const res = HabitRepository.getHabitById(habitId);
-            // Fixed: setHabit instead of setTask
             if (res.success) setHabit(res.data);
             setLoading(false);
         }
@@ -388,8 +429,28 @@ export const useHabitDetailViewModel = (habitId: string) => {
 
     const markDone = async () => {
         if (!habit) return;
-        const now = Date.now();
-        const updated = { ...habit, lastDoneAt: now, streak: habit.streak + 1, history: [...habit.history, now] };
+        const todayStart = new Date().setHours(0,0,0,0);
+        const isAlreadyDoneToday = habit.history.some(ts => new Date(ts).setHours(0,0,0,0) === todayStart);
+
+        let updated: HabitEntity;
+        if (isAlreadyDoneToday) {
+            const newHistory = habit.history.filter(ts => new Date(ts).setHours(0,0,0,0) !== todayStart);
+            updated = { 
+                ...habit, 
+                history: newHistory, 
+                streak: Math.max(0, habit.streak - 1),
+                lastDoneAt: newHistory.length > 0 ? Math.max(...newHistory) : undefined
+            };
+        } else {
+            const now = Date.now();
+            updated = { 
+                ...habit, 
+                lastDoneAt: now, 
+                streak: habit.streak + 1, 
+                history: [...habit.history, now] 
+            };
+        }
+
         setHabit(updated);
         await HabitRepository.updateHabit(HabitMapper.toDomain(updated));
         if (habit.goalId) await UseCases.recalcGoalProgress.execute(habit.goalId);
@@ -703,8 +764,8 @@ export const useGoalDetailViewModel = (userId: string, goalId: string) => {
 
     const deleteGoal = async () => { await UseCases.deleteGoal.execute(goalId); };
     const updateGoal = async (updates: Partial<GoalEntity>) => { if (!goal) return; const updated = { ...goal, ...updates }; await UseCases.updateGoal.execute(updated as GoalEntity); refresh(); };
-    const linkPlanToStage = async (stageId: string, planId: string) => { if (!goal) return; const newRoadmap = goal.roadmap.map(r => r.id === stageId ? { ...r, linkedPlanId: planId } : r); await updateGoal({ roadmap: newRoadmap }); };
-    const unlinkPlanFromStage = async (stageId: string) => { if (!goal) return; const newRoadmap = goal.roadmap.map(r => r.id === stageId ? { ...r, linkedPlanId: undefined } : r); await updateGoal({ roadmap: newRoadmap }); };
+    const linkPlanToStage = async (stageId: string, planId: string) => { await UseCases.linkPlanToStage.execute(goalId, stageId, planId); refresh(); };
+    const unlinkPlanFromStage = async (stageId: string, planId: string) => { await UseCases.unlinkPlanFromStage.execute(goalId, stageId, planId); refresh(); };
     const completeStage = async (stageId: string) => { const res = await UseCases.completeGoalStage.execute(goalId, stageId); if (res.success) refresh(); return res.success; };
 
     return { goal, tasks, report, analysis, loading, generatingReport, runningAnalysis, availablePlans, refresh, addStage, addTaskToStage, startSession, generateReport, runAnalysis, deleteGoal, updateGoal, linkPlanToStage, unlinkPlanFromStage, completeStage };
