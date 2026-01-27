@@ -76,7 +76,8 @@ export enum MapNodeType {
     FUTURE_SELF = 'FUTURE_SELF',
     NOTE = 'NOTE',
     LIMITATION = 'LIMITATION',
-    QUANTITATIVE_PLAN = 'QUANTITATIVE_PLAN'
+    QUANTITATIVE_PLAN = 'QUANTITATIVE_PLAN',
+    IMAGE = 'IMAGE'
 }
 
 export enum MapEdgeType {
@@ -378,6 +379,7 @@ export interface MapNodeEntity {
     content: {
         label: string;
         description?: string;
+        imageUrl?: string; // Поле для хранения картинки
         currentSelfData?: CurrentSelfData;
         futureSelfData?: FutureSelfData;
     };

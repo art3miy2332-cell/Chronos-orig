@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Minus, Navigation, Type, Undo, Redo, Trash2, Target, MousePointer2, AlertCircle, RefreshCw, X, Zap, ChevronRight, LayoutList, User, Calendar, ExternalLink, Save, Battery, Link2, Ban, ArrowRight, Layers, Lightbulb, HelpCircle, AlertTriangle, Book, Brain, FlaskConical, CheckSquare, GripHorizontal, ShieldAlert, Tag as TagIcon, Trophy, TrendingUp, Activity, Flame, Grid } from 'lucide-react';
+import { Plus, Minus, Navigation, Type, Undo, Redo, Trash2, Target, MousePointer2, AlertCircle, RefreshCw, X, Zap, ChevronRight, LayoutList, User, Calendar, ExternalLink, Save, Battery, Link2, Ban, ArrowRight, Layers, Lightbulb, HelpCircle, AlertTriangle, Book, Brain, FlaskConical, CheckSquare, GripHorizontal, ShieldAlert, Tag as TagIcon, Trophy, TrendingUp, Activity, Flame, Grid, Image as ImageIcon, Camera } from 'lucide-react';
 import { DatabaseService } from '../../utils/db';
 import { MapNodeEntity, MapNodeType, MapEdgeEntity, SyncMeta, MapEdgeType, CurrentSelfData, FutureSelfData, GraphAnalysisResult, AnalysisRuleId, MapNodeHealth, GoalEntity, TaskEntity, HabitEntity, Priority, PlanType, SpherePlanData, SphereTracker } from '../../types';
 import { MapAnalysisService } from '../../utils/map-analysis';
@@ -233,6 +233,7 @@ const NodeInspector: React.FC<{
     const [roleTitle, setRoleTitle] = useState('');
     const [tags, setTags] = useState<string[]>([]);
     const [customTag, setCustomTag] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         setLabel(node.content.label);
@@ -270,11 +271,23 @@ const NodeInspector: React.FC<{
         onClose();
     };
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const base64 = event.target?.result as string;
+            onUpdate({ content: { ...node.content, imageUrl: base64 } });
+        };
+        reader.readAsDataURL(file);
+    };
+
     const toggleTag = (tag: string) => setTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
     const addCustomTag = () => { if (customTag.trim() && !tags.includes(customTag.trim())) { setTags([...tags, customTag.trim()]); setCustomTag(''); } };
 
     const isAnchor = node.type === MapNodeType.CURRENT_SELF || node.type === MapNodeType.FUTURE_SELF;
     const isNoteOrBarrier = node.type === MapNodeType.NOTE || node.type === MapNodeType.LIMITATION;
+    const isImage = node.type === MapNodeType.IMAGE;
 
     return (
         <>
@@ -290,16 +303,29 @@ const NodeInspector: React.FC<{
                         node.type === MapNodeType.STEP ? <CheckSquare size={18} className="text-blue-500" /> : 
                         node.type === MapNodeType.HABIT ? <Activity size={18} className="text-orange-500" /> : 
                         node.type === MapNodeType.QUANTITATIVE_PLAN ? <Grid size={18} className="text-emerald-500" /> :
+                        node.type === MapNodeType.IMAGE ? <ImageIcon size={18} className="text-purple-500" /> :
                         <Brain size={18} className="text-slate-500" />}
-                        <span className="font-bold text-sm text-slate-700 dark:text-slate-200 uppercase">{node.type === MapNodeType.LIMITATION ? "Барьер" : node.type === MapNodeType.NOTE ? "Заметка" : node.type.replace('_', ' ')}</span>
+                        <span className="font-bold text-sm text-slate-700 dark:text-slate-200 uppercase">{node.type === MapNodeType.IMAGE ? "Образ" : node.type === MapNodeType.LIMITATION ? "Барьер" : node.type === MapNodeType.NOTE ? "Заметка" : node.type.replace('_', ' ')}</span>
                     </div>
                     <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
                 </div>
                 <div className="p-4 space-y-4 overflow-y-auto flex-1 no-scrollbar pb-10 md:pb-4">
-                    {isNoteOrBarrier && (
-                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
-                            <button onClick={() => onUpdate({ type: MapNodeType.NOTE })} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${node.type === MapNodeType.NOTE ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500'}`}>Заметка</button>
-                            <button onClick={() => onUpdate({ type: MapNodeType.LIMITATION })} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${node.type === MapNodeType.LIMITATION ? 'bg-white dark:bg-slate-700 text-rose-600 shadow-sm' : 'text-slate-500'}`}>Барьер</button>
+                    {isImage && (
+                        <div className="space-y-4">
+                            <div className="aspect-video w-full rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border-2 border-dashed border-slate-200 dark:border-slate-700 relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                                {node.content.imageUrl ? (
+                                    <img src={node.content.imageUrl} className="w-full h-full object-cover" alt="Vision" />
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2">
+                                        <Camera size={32} />
+                                        <span className="text-xs font-bold uppercase">Загрузить фото</span>
+                                    </div>
+                                )}
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold">
+                                    ИЗМЕНИТЬ
+                                </div>
+                                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+                            </div>
                         </div>
                     )}
                     <div className="space-y-3">
@@ -411,6 +437,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     const [unmappedTrackers, setUnmappedTrackers] = useState<SphereTracker[]>([]);
     const containerRef = useRef<HTMLDivElement>(null);
     const lastFocusedIdRef = useRef<string | null>(null);
+    const hiddenFileInputRef = useRef<HTMLInputElement>(null);
 
     // Refs for pinch-to-zoom
     const initialPinchDist = useRef<number | null>(null);
@@ -757,6 +784,30 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         const newNodes = [...nodes, newNode]; setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE', `Added Plan: ${tracker.title}`); saveToDb(newNodes, edges);
     };
 
+    const handleAddImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !mapId || !containerRef.current) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const base64 = event.target?.result as string;
+            const worldPos = screenToWorld(containerRef.current!.clientWidth / 2, containerRef.current!.clientHeight / 2, viewport);
+            const newNode: MapNodeEntity = { 
+                id: uuid(), 
+                mapId: mapId, 
+                type: MapNodeType.IMAGE, 
+                position: worldPos, 
+                content: { label: "Образ", imageUrl: base64 }, 
+                references: {}, 
+                meta: createMeta() 
+            };
+            const newNodes = [...nodes, newNode];
+            setNodes(newNodes);
+            pushToHistory(newNodes, edges, 'ADD_NODE', 'Added Motivation Image');
+            saveToDb(newNodes, edges);
+        };
+        reader.readAsDataURL(file);
+    };
+
     const commitEdit = () => {
         if (editingNodeId) {
             const newNodes = nodes.map(n => n.id === editingNodeId ? { ...n, content: { ...n.content, label: editText } } : n);
@@ -827,7 +878,9 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
 
             <div className="absolute top-20 md:top-4 left-4 z-20 flex flex-col gap-2">
                 <div className="bg-white dark:bg-slate-900 p-1.5 md:p-2 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col gap-1.5 md:gap-2">
-                    <button onClick={() => { if (containerRef.current) { const worldPos = screenToWorld(containerRef.current.clientWidth / 2, containerRef.current.clientHeight / 2, viewport); const newNode: MapNodeEntity = { id: uuid(), mapId: mapId!, type: MapNodeType.NOTE, position: worldPos, content: { label: "Заметка" }, references: {}, meta: createMeta() }; const newNodes = [...nodes, newNode]; setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE'); saveToDb(newNodes, edges); } }} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"><Brain size={18} className="md:w-5 md:h-5" /></button>
+                    <button onClick={() => { if (containerRef.current) { const worldPos = screenToWorld(containerRef.current.clientWidth / 2, containerRef.current.clientHeight / 2, viewport); const newNode: MapNodeEntity = { id: uuid(), mapId: mapId!, type: MapNodeType.NOTE, position: worldPos, content: { label: "Заметка" }, references: {}, meta: createMeta() }; const newNodes = [...nodes, newNode]; setNodes(newNodes); pushToHistory(newNodes, edges, 'ADD_NODE'); saveToDb(newNodes, edges); } }} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Добавить заметку"><Brain size={18} className="md:w-5 md:h-5" /></button>
+                    <button onClick={() => hiddenFileInputRef.current?.click()} className="p-2 text-slate-500 hover:text-purple-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Добавить образ (фото)"><ImageIcon size={18} className="md:w-5 md:h-5" /></button>
+                    <input type="file" ref={hiddenFileInputRef} className="hidden" accept="image/*" onChange={handleAddImage} />
                     <div className="h-px bg-slate-200 dark:bg-slate-700 my-0.5 md:my-1"></div>
                     <button onClick={undo} disabled={!canUndo} className="p-2 text-slate-500 hover:text-slate-900 disabled:opacity-30"><Undo size={18} className="md:w-5 md:h-5" /></button>
                     <button onClick={redo} disabled={!canRedo} className="p-2 text-slate-500 hover:text-slate-900 disabled:opacity-30"><Redo size={18} className="md:w-5 md:h-5" /></button>
@@ -864,34 +917,55 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                         if (hasIssue) borderColor = 'border-rose-400 border-dashed';
                         if (selectedNodeIds.has(node.id)) borderColor = 'border-indigo-500 ring-4 ring-indigo-500/30';
                         const isHoveredForConnection = hoveredNodeId === node.id && (interactionMode === 'CONNECTING' || interactionMode === 'RECONNECTING');
-                        const nodeBg = node.type === MapNodeType.NOTE ? 'bg-slate-50 dark:bg-slate-800' :
-                                       node.type === MapNodeType.LIMITATION ? 'bg-rose-50 border-rose-200 dark:bg-rose-900/20 dark:border-rose-900/50' :
-                                       node.type === MapNodeType.CURRENT_SELF ? 'bg-indigo-50 dark:bg-indigo-900/20' :
-                                       node.type === MapNodeType.FUTURE_SELF ? 'bg-emerald-50 dark:bg-emerald-900/20' :
-                                       node.type === MapNodeType.HABIT ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' :
-                                       node.type === MapNodeType.QUANTITATIVE_PLAN ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800' :
-                                       'bg-white dark:bg-slate-900';
+                        
+                        let nodeBg = 'bg-white dark:bg-slate-900';
+                        if (node.type === MapNodeType.IMAGE) nodeBg = 'bg-white p-1'; // Изображения на белом фоне
+                        else if (node.type === MapNodeType.NOTE) nodeBg = 'bg-slate-50 dark:bg-slate-800';
+                        else if (node.type === MapNodeType.LIMITATION) nodeBg = 'bg-rose-50 border-rose-200 dark:bg-rose-900/20 dark:border-rose-900/50';
+                        else if (node.type === MapNodeType.CURRENT_SELF) nodeBg = 'bg-indigo-50 dark:bg-indigo-900/20';
+                        else if (node.type === MapNodeType.FUTURE_SELF) nodeBg = 'bg-emerald-50 dark:bg-emerald-900/20';
+                        else if (node.type === MapNodeType.HABIT) nodeBg = 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800';
+                        else if (node.type === MapNodeType.QUANTITATIVE_PLAN) nodeBg = 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800';
+                        
                         let timeProgress = 0, orbitColor = "#3b82f6";
                         if (node.type === MapNodeType.FUTURE_SELF && node.content.futureSelfData?.horizon?.targetDate) {
                             const start = node.meta.createdAt, end = node.content.futureSelfData.horizon.targetDate, nowTs = Date.now();
                             if (end > start) { timeProgress = Math.min(100, Math.max(0, ((nowTs - start) / (end - start)) * 100)); if (timeProgress >= 85) orbitColor = "#ef4444"; else if (timeProgress >= 50) orbitColor = "#f97316"; else if (timeProgress >= 25) orbitColor = "#a855f7"; }
                         }
+                        
+                        const isImage = node.type === MapNodeType.IMAGE;
+
                         return (
-                            <div key={node.id} data-node-id={node.id} onPointerDown={(e) => handleNodePointerDown(e, node.id)} onDoubleClick={(e) => handleNodeDoubleClick(e, node)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ transform: `translate(${node.position.x}px, ${node.position.y}px)`, width: '150px', minHeight: '60px', touchAction: 'none' }} className={`absolute top-0 left-0 rounded-xl shadow-sm border-2 flex flex-col justify-center items-center p-3 transition-all hover:shadow-lg group ${borderColor} ${nodeBg} ${isHoveredForConnection ? 'ring-4 ring-emerald-400 border-emerald-500 scale-105 z-10' : ''}`}>
+                            <div key={node.id} data-node-id={node.id} onPointerDown={(e) => handleNodePointerDown(e, node.id)} onDoubleClick={(e) => handleNodeDoubleClick(e, node)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ transform: `translate(${node.position.x}px, ${node.position.y}px)`, width: '150px', minHeight: isImage ? '120px' : '60px', touchAction: 'none' }} className={`absolute top-0 left-0 rounded-xl shadow-sm border-2 flex flex-col items-center transition-all hover:shadow-lg group ${borderColor} ${nodeBg} ${isHoveredForConnection ? 'ring-4 ring-emerald-400 border-emerald-500 scale-105 z-10' : ''} ${isImage ? 'p-1' : 'justify-center p-3'}`}>
                                 {node.type === MapNodeType.FUTURE_SELF && node.content.futureSelfData?.horizon?.targetDate && ( <div className="absolute inset-0 -m-[10px] pointer-events-none overflow-visible"><svg width="170" height="80" viewBox="0 0 170 80" className="overflow-visible"><defs><filter id={`glow-${node.id}`}><feGaussianBlur stdDeviation="2.5" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><rect x="5" y="5" width="160" height="70" rx="15" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-200 dark:text-slate-800 opacity-30" /><rect x="5" y="5" width="160" height="70" rx="15" fill="none" stroke={orbitColor} strokeWidth="3" strokeDasharray="460" strokeDashoffset={460 - (460 * (timeProgress / 100))} strokeLinecap="round" className="transition-all duration-1000 ease-in-out" filter={`url(#glow-${node.id})`} style={{ transformOrigin: 'center', transform: 'rotate(0deg)' }} /></svg></div> )}
                                 <div onPointerDown={(e) => handleConnectPointerDown(e, node.id, 'right')} className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full opacity-0 group-hover:opacity-100 cursor-crosshair z-20 hover:scale-125 transition-all shadow-sm" /><div onPointerDown={(e) => handleConnectPointerDown(e, node.id, 'left')} className="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full opacity-0 group-hover:opacity-100 cursor-crosshair z-20 hover:scale-125 transition-all shadow-sm" /><div onPointerDown={(e) => handleConnectPointerDown(e, node.id, 'top')} className="absolute left-1/2 -top-2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full opacity-0 group-hover:opacity-100 cursor-crosshair z-20 hover:scale-125 transition-all shadow-sm" /><div onPointerDown={(e) => handleConnectPointerDown(e, node.id, 'bottom')} className="absolute left-1/2 -bottom-2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full opacity-0 group-hover:opacity-100 cursor-crosshair z-20 hover:scale-125 transition-all shadow-sm" />
                                 {editingNodeId === node.id ? ( <textarea value={editText} onChange={(e) => setEditText(e.target.value)} onBlur={commitEdit} autoFocus className="w-full bg-transparent text-center text-sm font-medium outline-none resize-none overflow-hidden h-full dark:text-white" rows={2} /> ) : (
                                     <>
-                                        {node.type === MapNodeType.GOAL && <Target size={12} className="text-indigo-500 mb-1" />}
-                                        {node.type === MapNodeType.NOTE && <Brain size={12} className="text-slate-400 mb-1" />}
-                                        {node.type === MapNodeType.LIMITATION && <ShieldAlert size={12} className="text-rose-500 mb-1" />}
-                                        {node.type === MapNodeType.STEP && <CheckSquare size={12} className="text-blue-500 mb-1" />}
-                                        {node.type === MapNodeType.HABIT && <Activity size={12} className="text-orange-500 mb-1" />}
-                                        {node.type === MapNodeType.QUANTITATIVE_PLAN && <Grid size={12} className="text-emerald-500 mb-1" />}
-                                        <div className="font-medium text-center text-slate-800 dark:text-slate-200 pointer-events-none select-none leading-tight text-sm truncate max-w-full">{node.content.label || "Empty"}</div>
-                                        {node.type === MapNodeType.FUTURE_SELF && ( <div className="flex flex-col items-center mt-1 w-full overflow-hidden"><div className="text-[9px] uppercase font-bold text-emerald-500">Я 2.0</div>{node.content.futureSelfData?.horizon?.targetDate ? ( <div className="text-[8px] text-emerald-600 font-mono mt-0.5 font-bold bg-white/50 dark:bg-slate-800/50 px-1 rounded">До: {new Date(node.content.futureSelfData.horizon.targetDate).toLocaleDateString()}</div> ) : null}{node.content.futureSelfData?.identity?.tags && node.content.futureSelfData.identity.tags.length > 0 && ( <div className="flex flex-wrap justify-center gap-0.5 mt-1.5 w-full">{node.content.futureSelfData.identity.tags.slice(0, 3).map(tag => ( <span key={tag} className="text-[7px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-1 py-0.2 rounded border border-emerald-200 dark:border-emerald-800 truncate max-w-[40px]">{tag}</span> ))}</div> )}</div> )}
-                                        {(node.type === MapNodeType.GOAL || node.type === MapNodeType.STEP || node.type === MapNodeType.HABIT || node.type === MapNodeType.QUANTITATIVE_PLAN) && ( <div className="w-full h-1 bg-slate-100 dark:bg-slate-700 rounded-full mt-2 overflow-hidden"><div className={`h-full ${health === MapNodeHealth.HEALTHY ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{width: `${progress}%`}} /></div> )}
-                                        {node.type === MapNodeType.CURRENT_SELF && <div className="flex flex-col items-center mt-1"><div className="text-[9px] uppercase font-bold text-slate-400">Я Сейчас</div>{node.content.currentSelfData && <div className="text-[8px] text-indigo-500 font-mono mt-0.5">Energy: {node.content.currentSelfData.metrics.averageEnergy}%</div>}</div>}
+                                        {isImage ? (
+                                            <div className="w-full h-full flex flex-col animate-in fade-in">
+                                                <div className="flex-1 bg-slate-100 rounded-lg overflow-hidden relative">
+                                                    {node.content.imageUrl ? (
+                                                        <img src={node.content.imageUrl} className="w-full h-full object-cover" alt="Vision" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-slate-300"><ImageIcon size={24} /></div>
+                                                    )}
+                                                </div>
+                                                <div className="mt-1 px-1 py-0.5 text-[10px] font-bold text-center text-slate-500 uppercase tracking-tight truncate">{node.content.label}</div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {node.type === MapNodeType.GOAL && <Target size={12} className="text-indigo-500 mb-1" />}
+                                                {node.type === MapNodeType.NOTE && <Brain size={12} className="text-slate-400 mb-1" />}
+                                                {node.type === MapNodeType.LIMITATION && <ShieldAlert size={12} className="text-rose-500 mb-1" />}
+                                                {node.type === MapNodeType.STEP && <CheckSquare size={12} className="text-blue-500 mb-1" />}
+                                                {node.type === MapNodeType.HABIT && <Activity size={12} className="text-orange-500 mb-1" />}
+                                                {node.type === MapNodeType.QUANTITATIVE_PLAN && <Grid size={12} className="text-emerald-500 mb-1" />}
+                                                <div className="font-medium text-center text-slate-800 dark:text-slate-200 pointer-events-none select-none leading-tight text-sm truncate max-w-full">{node.content.label || "Empty"}</div>
+                                                {node.type === MapNodeType.FUTURE_SELF && ( <div className="flex flex-col items-center mt-1 w-full overflow-hidden"><div className="text-[9px] uppercase font-bold text-emerald-500">Я 2.0</div>{node.content.futureSelfData?.horizon?.targetDate ? ( <div className="text-[8px] text-emerald-600 font-mono mt-0.5 font-bold bg-white/50 dark:bg-slate-800/50 px-1 rounded">До: {new Date(node.content.futureSelfData.horizon.targetDate).toLocaleDateString()}</div> ) : null}{node.content.futureSelfData?.identity?.tags && node.content.futureSelfData.identity.tags.length > 0 && ( <div className="flex flex-wrap justify-center gap-0.5 mt-1.5 w-full">{node.content.futureSelfData.identity.tags.slice(0, 3).map(tag => ( <span key={tag} className="text-[7px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-1 py-0.2 rounded border border-emerald-200 dark:border-emerald-800 truncate max-w-[40px]">{tag}</span> ))}</div> )}</div> )}
+                                                {(node.type === MapNodeType.GOAL || node.type === MapNodeType.STEP || node.type === MapNodeType.HABIT || node.type === MapNodeType.QUANTITATIVE_PLAN) && ( <div className="w-full h-1 bg-slate-100 dark:bg-slate-700 rounded-full mt-2 overflow-hidden"><div className={`h-full ${health === MapNodeHealth.HEALTHY ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{width: `${progress}%`}} /></div> )}
+                                                {node.type === MapNodeType.CURRENT_SELF && <div className="flex flex-col items-center mt-1"><div className="text-[9px] uppercase font-bold text-slate-400">Я Сейчас</div>{node.content.currentSelfData && <div className="text-[8px] text-indigo-500 font-mono mt-0.5">Energy: {node.content.currentSelfData.metrics.averageEnergy}%</div>}</div>}
+                                            </>
+                                        )}
                                     </>
                                 )}
                             </div>
