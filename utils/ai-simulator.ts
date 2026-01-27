@@ -1,8 +1,7 @@
-
 import { SuggestionStatus, Diagnostics, DailyInsight, WeeklyInsight, MonthlyInsight, ChatMessage, WeeklyPlanData, MonthlyPlanData, PlanTask, UserEntity, Priority, GoalEntity, GoalAnalysis, GoalReviewReport } from '../types';
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
-const GoalReviewSchema: Schema = {
+const GoalReviewSchema = {
     type: Type.OBJECT,
     properties: {
         summary: { type: Type.STRING, description: "Short summary (1-2 sentences)" },
@@ -32,7 +31,7 @@ const GoalReviewSchema: Schema = {
     required: ['summary', 'insights', 'recommendations', 'nextSteps', 'uiBlock']
 };
 
-const GoalRiskSchema: Schema = {
+const GoalRiskSchema = {
     type: Type.OBJECT,
     properties: {
         realisticPercent: { type: Type.NUMBER, description: "Probability of success 0-100" },
@@ -52,7 +51,7 @@ const GoalRiskSchema: Schema = {
     required: ['realisticPercent', 'riskLevel', 'riskFactors', 'topRecommendations']
 };
 
-const PlanReviewSchema: Schema = {
+const PlanReviewSchema = {
     type: Type.OBJECT,
     properties: {
         reviewCard: {
@@ -71,10 +70,7 @@ const PlanReviewSchema: Schema = {
 
 export const AISimulator = {
     generateGoalReview: async (goal: GoalEntity, metrics: any, period: 'WEEK' | 'MONTH'): Promise<GoalReviewReport | null> => {
-        const apiKey = process.env.API_KEY || '';
-        
-        // Mock if no key
-        if (!apiKey) {
+        if (!process.env.API_KEY) {
             return {
                 period,
                 summary: "Simulation: Good progress on tasks, but habit consistency dropped.",
@@ -97,7 +93,7 @@ export const AISimulator = {
             };
         }
 
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
         const prompt = `
         Ты — Chronos Strategy Engine.
@@ -122,7 +118,7 @@ export const AISimulator = {
 
         try {
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-pro-preview',
                 contents: prompt,
                 config: {
                     responseMimeType: 'application/json',
@@ -143,10 +139,7 @@ export const AISimulator = {
     },
 
     assessGoalRisk: async (goal: GoalEntity, context: any): Promise<GoalAnalysis | null> => {
-        const apiKey = process.env.API_KEY || '';
-        
-        // Mock
-        if (!apiKey) {
+        if (!process.env.API_KEY) {
             return {
                 realisticPercent: 85,
                 riskLevel: 'LOW',
@@ -159,7 +152,7 @@ export const AISimulator = {
             };
         }
 
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
         const prompt = `
         Analyze the feasibility of this goal.
@@ -177,7 +170,7 @@ export const AISimulator = {
 
         try {
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-pro-preview',
                 contents: prompt,
                 config: {
                     responseMimeType: 'application/json',
@@ -199,7 +192,6 @@ export const AISimulator = {
 
     generateResponse: async (prompt: string, context: any, history: ChatMessage[] = []): Promise<{ text: string, suggestionPayload?: string, suggestionType?: string, diagnostics?: Diagnostics }> => {
         
-        // 1. Initial Greeting Handler (Local, Instant)
         if (prompt === "SYSTEM_INIT_ONBOARDING") {
              const name = context.userProfile?.displayName;
              const greeting = name ? `Привет, ${name}.` : "Привет.";
@@ -229,10 +221,7 @@ export const AISimulator = {
              };
         }
 
-        const apiKey = process.env.API_KEY || '';
-        
-        // Mock Response if no API Key
-        if (!apiKey) {
+        if (!process.env.API_KEY) {
             if (prompt.startsWith("GENERATE_WEEKLY_PLAN_STRUCTURE")) {
                 const mockPlan: WeeklyPlanData = {
                     mainGoal: "Launch MVP",
@@ -255,7 +244,6 @@ export const AISimulator = {
                 return { text: "Here is a monthly draft.", suggestionPayload: JSON.stringify(mockPlan) };
             }
             if (prompt.startsWith("GENERATE_PLAN_REVIEW")) {
-                 // Dynamic Mock based on context if possible, but keep it structured
                  const mockReview = {
                     reviewCard: {
                         score: 78,
@@ -276,10 +264,10 @@ export const AISimulator = {
             };
         }
         
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
-        let customSchema: Schema | undefined = undefined;
-        let responseMimeType: string | undefined = undefined;
+        let customSchema = undefined;
+        let responseMimeType = undefined;
 
         if (prompt.startsWith("GENERATE_PLAN_REVIEW")) {
             customSchema = PlanReviewSchema;
@@ -299,24 +287,20 @@ export const AISimulator = {
              `;
         }
 
-        // --- TONE & STYLE LOGIC ---
         const userProfile = context.userProfile || {};
         const tone = userProfile.aiTonePreference || 'Coach';
         const motivation = userProfile.coachingProfile?.motivationStyle || 'ANALYTICAL';
 
         let stylePrompt = "";
         
-        // Base Tone
         if (tone === 'Formal') stylePrompt += "STYLE: Professional, concise, no emojis. ";
         else if (tone === 'Casual') stylePrompt += "STYLE: Friendly, warm, use emojis, conversational. ";
         else stylePrompt += "STYLE: Coach-like, authoritative yet supportive. ";
 
-        // Motivation Overlay
         if (motivation === 'TOUGH_LOVE') stylePrompt += "APPROACH: Direct, strict, accountability-focused. No excuses. ";
         else if (motivation === 'GENTLE_SUPPORT') stylePrompt += "APPROACH: Empathetic, patient, encouraging. Focus on well-being. ";
         else stylePrompt += "APPROACH: Analytical, data-driven, logical. ";
 
-        // Contextual Prompt Construction
         const fullPrompt = `
         Role: Productivity Coach (Chronos).
         Language: Russian (Always).
@@ -351,7 +335,7 @@ export const AISimulator = {
         
         try {
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-flash-preview',
                 contents: fullPrompt,
                 config: {
                     responseMimeType: responseMimeType,
@@ -363,7 +347,7 @@ export const AISimulator = {
             let payload = undefined;
             
             if (customSchema || responseMimeType === 'application/json') {
-                payload = text; // The whole response IS the payload
+                payload = text;
                 text = "Анализ готов.";
             } else if (text.includes("```json")) {
                 const match = text.match(/```json\n([\s\S]*?)\n```/);
