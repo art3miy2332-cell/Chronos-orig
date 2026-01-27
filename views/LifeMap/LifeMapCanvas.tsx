@@ -919,7 +919,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                         const isHoveredForConnection = hoveredNodeId === node.id && (interactionMode === 'CONNECTING' || interactionMode === 'RECONNECTING');
                         
                         let nodeBg = 'bg-white dark:bg-slate-900';
-                        if (node.type === MapNodeType.IMAGE) nodeBg = 'bg-white p-1'; // Изображения на белом фоне
+                        if (node.type === MapNodeType.IMAGE) nodeBg = 'bg-white dark:bg-slate-800 ring-1 ring-black/5 dark:ring-white/5'; 
                         else if (node.type === MapNodeType.NOTE) nodeBg = 'bg-slate-50 dark:bg-slate-800';
                         else if (node.type === MapNodeType.LIMITATION) nodeBg = 'bg-rose-50 border-rose-200 dark:bg-rose-900/20 dark:border-rose-900/50';
                         else if (node.type === MapNodeType.CURRENT_SELF) nodeBg = 'bg-indigo-50 dark:bg-indigo-900/20';
@@ -943,14 +943,14 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                                     <>
                                         {isImage ? (
                                             <div className="w-full h-full flex flex-col animate-in fade-in">
-                                                <div className="flex-1 bg-slate-100 rounded-lg overflow-hidden relative">
+                                                <div className="flex-1 bg-slate-100 dark:bg-slate-900 rounded-lg overflow-hidden relative">
                                                     {node.content.imageUrl ? (
                                                         <img src={node.content.imageUrl} className="w-full h-full object-cover" alt="Vision" />
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center text-slate-300"><ImageIcon size={24} /></div>
                                                     )}
                                                 </div>
-                                                <div className="mt-1 px-1 py-0.5 text-[10px] font-bold text-center text-slate-500 uppercase tracking-tight truncate">{node.content.label}</div>
+                                                <div className="mt-1 px-1 py-1 text-[10px] font-bold text-center text-slate-500 dark:text-slate-400 uppercase tracking-tight truncate">{node.content.label}</div>
                                             </div>
                                         ) : (
                                             <>
