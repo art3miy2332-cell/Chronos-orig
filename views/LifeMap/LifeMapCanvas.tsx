@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Minus, Navigation, Type, Undo, Redo, Trash2, Target, MousePointer2, AlertCircle, RefreshCw, X, Zap, ChevronRight, LayoutList, User, Calendar, ExternalLink, Save, Battery, Link2, Ban, ArrowRight, Layers, Lightbulb, HelpCircle, AlertTriangle, Book, Brain, FlaskConical, CheckSquare, GripHorizontal, ShieldAlert, Tag as TagIcon, Trophy, TrendingUp, Activity, Flame, Grid, Image as ImageIcon, Camera } from 'lucide-react';
 import { DatabaseService } from '../../utils/db';
@@ -34,6 +35,37 @@ const screenToWorld = (x: number, y: number, viewport: { x: number, y: number, z
         x: (x - viewport.x) / viewport.zoom,
         y: (y - viewport.y) / viewport.zoom
     };
+};
+
+// Функция сжатия изображений для экономии места в LocalStorage
+const compressImage = (base64Str: string, maxWidth = 800, maxHeight = 800): Promise<string> => {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.src = base64Str;
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+                if (width > maxWidth) {
+                    height *= maxWidth / width;
+                    width = maxWidth;
+                }
+            } else {
+                if (height > maxHeight) {
+                    width *= maxHeight / height;
+                    height = maxHeight;
+                }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.7)); // Сжимаем до 70% качества JPEG
+        };
+    });
 };
 
 const getPriorityColor = (p: Priority) => {
@@ -266,13 +298,14 @@ const NodeInspector: React.FC<{
         onClose();
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = (event) => {
-            const base64 = event.target?.result as string;
-            onUpdate({ content: { ...node.content, imageUrl: base64 } });
+        reader.onload = async (event) => {
+            const rawBase64 = event.target?.result as string;
+            const compressed = await compressImage(rawBase64);
+            onUpdate({ content: { ...node.content, imageUrl: compressed } });
         };
         reader.readAsDataURL(file);
     };
@@ -929,19 +962,21 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         DatabaseService.mapNodes.insert(newNode);
     };
 
-    const handleAddImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleAddImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !mapId || !containerRef.current) return;
         const reader = new FileReader();
-        reader.onload = (event) => {
-            const base64 = event.target?.result as string;
+        reader.onload = async (event) => {
+            const rawBase64 = event.target?.result as string;
+            // Сжимаем фото перед добавлением, чтобы не переполнить LocalStorage
+            const compressed = await compressImage(rawBase64);
             const worldPos = screenToWorld(containerRef.current!.clientWidth / 2, containerRef.current!.clientHeight / 2, viewportRef.current);
             const newNode: MapNodeEntity = { 
                 id: uuid(), 
                 mapId: mapId!, 
                 type: MapNodeType.IMAGE, 
                 position: worldPos, 
-                content: { label: "Образ", imageUrl: base64 }, 
+                content: { label: "Образ", imageUrl: compressed }, 
                 references: {}, 
                 meta: createMeta() 
             };
