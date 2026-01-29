@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Minus, Navigation, Type, Undo, Redo, Trash2, Target, MousePointer2, AlertCircle, RefreshCw, X, Zap, ChevronRight, LayoutList, User, Calendar, ExternalLink, Save, Battery, Link2, Ban, ArrowRight, Layers, Lightbulb, HelpCircle, AlertTriangle, Book, Brain, FlaskConical, CheckSquare, GripHorizontal, ShieldAlert, Tag as TagIcon, Trophy, TrendingUp, Activity, Flame, Grid, Image as ImageIcon, Camera } from 'lucide-react';
 import { DatabaseService } from '../../utils/db';
@@ -440,6 +439,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     const nodesRef = useRef<MapNodeEntity[]>([]);
     const edgesRef = useRef<MapEdgeEntity[]>([]);
     const viewportRef = useRef(viewport);
+    const selectedNodeIdsRef = useRef<Set<string>>(new Set());
 
     // Persistence Helpers
     const saveViewportToDb = (v: typeof viewport) => {
@@ -457,6 +457,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     useEffect(() => { nodesRef.current = nodes; }, [nodes]);
     useEffect(() => { edgesRef.current = edges; }, [edges]);
     useEffect(() => { viewportRef.current = viewport; }, [viewport]);
+    useEffect(() => { selectedNodeIdsRef.current = selectedNodeIds; }, [selectedNodeIds]);
 
     const initialPinchDist = useRef<number | null>(null);
     const initialPinchViewport = useRef<any>(null);
@@ -672,9 +673,23 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         e.stopPropagation();
         if (interactionMode === 'CONNECTING' || interactionMode === 'RECONNECTING') return; 
         if (e.button === 0) {
-            if (e.shiftKey) { const newSet = new Set(selectedNodeIds); if (newSet.has(nodeId)) newSet.delete(nodeId); else newSet.add(nodeId); setSelectedNodeIds(newSet); }
-            else { if (!selectedNodeIds.has(nodeId)) { setSelectedNodeIds(new Set([nodeId])); } }
-            setSelectedEdgeId(null); setInteractionMode('DRAGGING'); setDragStartPos({ x: e.clientX, y: e.clientY });
+            let nextSelection = new Set(selectedNodeIdsRef.current);
+            if (e.shiftKey) { 
+                if (nextSelection.has(nodeId)) nextSelection.delete(nodeId); 
+                else nextSelection.add(nodeId); 
+            }
+            else { 
+                if (!nextSelection.has(nodeId)) { 
+                    nextSelection = new Set([nodeId]); 
+                } 
+            }
+            setSelectedNodeIds(nextSelection);
+            selectedNodeIdsRef.current = nextSelection;
+
+            setSelectedEdgeId(null); 
+            setInteractionMode('DRAGGING'); 
+            setDragStartPos({ x: e.clientX, y: e.clientY });
+            
             const startPos: Record<string, {x:number, y:number}> = {};
             nodes.forEach(n => { if (n.position) startPos[n.id] = { ...n.position }; });
             setNodeStartPositions(startPos);
@@ -739,9 +754,10 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
             setDragStartPos({ x: e.clientX, y: e.clientY });
         } else if (interactionMode === 'DRAGGING') {
             const dx = (e.clientX - dragStartPos.x) / viewport.zoom, dy = (e.clientY - dragStartPos.y) / viewport.zoom;
+            const currentSelection = selectedNodeIdsRef.current;
             setNodes(prev => {
                 const next = prev.map(n => {
-                    if (selectedNodeIds.has(n.id)) { 
+                    if (currentSelection.has(n.id)) { 
                         const start = nodeStartPositions[n.id]; 
                         if (start) return { ...n, position: { x: start.x + dx, y: start.y + dy } }; 
                     }
@@ -780,9 +796,11 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         if (interactionMode === 'PANNING') {
             saveViewportToDb(viewportRef.current);
         } else if (interactionMode === 'DRAGGING') {
+            // ПРИНУДИТЕЛЬНОЕ СОХРАНЕНИЕ КООРДИНАТ ВСЕХ ВЫБРАННЫХ НОД
             const currentNodes = nodesRef.current;
+            const currentSelection = selectedNodeIdsRef.current;
             currentNodes.forEach((n: MapNodeEntity) => {
-                if (selectedNodeIds.has(n.id)) {
+                if (currentSelection.has(n.id)) {
                     DatabaseService.mapNodes.update(n);
                 }
             });
@@ -791,8 +809,8 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                 pushToHistory(currentNodes, edgesRef.current, 'MOVE_NODE'); 
             }
             else { 
-                if (selectedNodeIds.size === 1) { 
-                    const idArray = Array.from(selectedNodeIds);
+                if (currentSelection.size === 1) { 
+                    const idArray = Array.from(currentSelection);
                     const firstId = idArray.length > 0 ? (idArray[0] as string) : null;
                     if (firstId) {
                         setActiveInspectorNodeId(firstId); 
@@ -832,7 +850,9 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         setInteractionMode('IDLE');
         
         if (capturedElementRef.current && capturedElementRef.current.hasPointerCapture(e.pointerId)) {
-            capturedElementRef.current.releasePointerCapture(e.pointerId);
+            try {
+                capturedElementRef.current.releasePointerCapture(e.pointerId);
+            } catch(e) {}
             capturedElementRef.current = null;
         }
     };
@@ -967,8 +987,9 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
 
     const handleDelete = () => {
         if (selectedEdgeId) { deleteEdge(selectedEdgeId); return; }
-        if (selectedNodeIds.size === 0) return;
-        const toDelete = Array.from(selectedNodeIds).filter(id => { const node = nodesRef.current.find(n => n.id === id); return node && node.type !== MapNodeType.CURRENT_SELF && node.type !== MapNodeType.FUTURE_SELF; });
+        const currentSelection = selectedNodeIdsRef.current;
+        if (currentSelection.size === 0) return;
+        const toDelete = Array.from(currentSelection).filter(id => { const node = nodesRef.current.find(n => n.id === id); return node && node.type !== MapNodeType.CURRENT_SELF && node.type !== MapNodeType.FUTURE_SELF; });
         if (toDelete.length === 0) return;
         const newNodes = nodesRef.current.filter(n => !toDelete.includes(n.id));
         const deletedEdges = edgesRef.current.filter(e => toDelete.includes(e.sourceNodeId) || toDelete.includes(e.targetNodeId));
@@ -1011,7 +1032,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedNodeIds, selectedEdgeId, editingNodeId]);
+    }, [editingNodeId]);
 
     const MarkerDefs = () => (
         <defs>
