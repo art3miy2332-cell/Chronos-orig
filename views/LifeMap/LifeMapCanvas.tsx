@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Minus, Navigation, Type, Undo, Redo, Trash2, Target, MousePointer2, AlertCircle, RefreshCw, X, Zap, ChevronRight, LayoutList, User, Calendar, ExternalLink, Save, Battery, Link2, Ban, ArrowRight, Layers, Lightbulb, HelpCircle, AlertTriangle, Book, Brain, FlaskConical, CheckSquare, GripHorizontal, ShieldAlert, Tag as TagIcon, Trophy, TrendingUp, Activity, Flame, Grid, Image as ImageIcon, Camera } from 'lucide-react';
 import { DatabaseService } from '../../utils/db';
@@ -279,23 +278,28 @@ const NodeInspector: React.FC<{
     }, [node.id, node.content]);
 
     const handleSave = () => {
-        const updates: any = { content: { ...node.content, label, description: desc } };
-        if (node.type === MapNodeType.CURRENT_SELF) {
-            updates.content.currentSelfData = { 
-                ...(node.content.currentSelfData || { metrics: { averageEnergy: 50, completionRate: 0, focusCapacityMin: 0 }, constraints: { availableHoursDaily: 0 }, audit: { weaknesses: [], blockers: [], lastCheck: 0 } }),
-                metrics: { ...(node.content.currentSelfData?.metrics || { completionRate: 0, focusCapacityMin: 0 }), averageEnergy: energy } 
-            };
+        try {
+            const updates: any = { content: { ...node.content, label, description: desc } };
+            if (node.type === MapNodeType.CURRENT_SELF) {
+                updates.content.currentSelfData = { 
+                    ...(node.content.currentSelfData || { metrics: { averageEnergy: 50, completionRate: 0, focusCapacityMin: 0 }, constraints: { availableHoursDaily: 0 }, audit: { weaknesses: [], blockers: [], lastCheck: 0 } }),
+                    metrics: { ...(node.content.currentSelfData?.metrics || { completionRate: 0, focusCapacityMin: 0 }), averageEnergy: energy } 
+                };
+            }
+            if (node.type === MapNodeType.FUTURE_SELF) {
+                updates.content.futureSelfData = { 
+                    ...node.content.futureSelfData, 
+                    horizon: { ...(node.content.futureSelfData?.horizon || { label: 'Target' }), targetDate: horizonDate ? new Date(horizonDate).getTime() : 0 }, 
+                    identity: { ...(node.content.futureSelfData?.identity || { roleTitle: '' }), roleTitle: roleTitle, tags: tags },
+                    requirements: node.content.futureSelfData?.requirements || { skills: [], traits: [] }
+                };
+            }
+            onUpdate(updates);
+        } catch (e) {
+            console.error("Critical error in NodeInspector save:", e);
+        } finally {
+            onClose(); // Guaranteed close
         }
-        if (node.type === MapNodeType.FUTURE_SELF) {
-            updates.content.futureSelfData = { 
-                ...node.content.futureSelfData, 
-                horizon: { ...(node.content.futureSelfData?.horizon || { label: 'Target' }), targetDate: horizonDate ? new Date(horizonDate).getTime() : 0 }, 
-                identity: { ...(node.content.futureSelfData?.identity || { roleTitle: '' }), roleTitle: roleTitle, tags: tags },
-                requirements: node.content.futureSelfData?.requirements || { skills: [], traits: [] }
-            };
-        }
-        onUpdate(updates);
-        onClose();
     };
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -428,7 +432,7 @@ const LibraryPanel: React.FC<{
                 <div className="overflow-y-auto flex-1 p-2 pb-10 md:pb-2 no-scrollbar">
                     {activeTab === 'GOALS' && ( <div className="space-y-1">{goals.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Все цели уже на карте.</div> : goals.map(goal => (<div key={goal.id} onClick={() => { onPickGoal(goal); onClose(); }} className="p-3 border-b border-slate-50 dark:border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><Target size={18} className="text-indigo-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{goal.title}</div><div className="text-[10px] text-slate-400 mt-0.5">{goal.progress}% завершено</div></div></div>))}</div>)}
                     {activeTab === 'TASKS' && ( <div className="space-y-1">{tasks.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Нет свободных активных задач.</div> : tasks.map(task => (<div key={task.id} onClick={() => { onPickTask(task); onClose(); }} className="p-3 border-b border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><CheckSquare size={18} className="text-blue-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{task.title}</div><div className={`text-[10px] uppercase font-bold mt-0.5 ${getPriorityColor(task.priority)}`}>{task.priority}</div></div></div>))}</div>)}
-                    {activeTab === 'HABITS' && ( <div className="space-y-1">{habits.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Все привычки на карте.</div> : habits.map(habit => (<div key={habit.id} onClick={() => { onPickHabit(habit); onClose(); }} className="p-3 border-b border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><Activity size={18} className="text-orange-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{habit.title}</div><div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1"><Flame size={10} className="text-orange-500" /> {habit.streak} дней</div></div></div>))}</div>)}
+                    {activeTab === 'HABITS' && ( <div className="space-y-1">{habits.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Все привычки на карте.</div> : habits.map(habit => (<div key={habit.id} onClick={() => { onPickHabit(habit); onClose(); }} className="p-3 border-b border-slate-50 dark:border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><Activity size={18} className="text-orange-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{habit.title}</div><div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1"><Flame size={10} className="text-orange-500" /> {habit.streak} дней</div></div></div>))}</div>)}
                     {activeTab === 'SPHERES' && ( <div className="space-y-1">{trackers.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Все планы по сферам уже на карте.</div> : trackers.map(t => (<div key={t.id} onClick={() => { onPickTracker(t); onClose(); }} className="p-3 border-b border-slate-50 dark:border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><Grid size={18} className="text-emerald-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{t.title}</div><div className="text-[10px] text-slate-400 mt-0.5">Цель: {t.targetCount}</div></div></div>))}</div>)}
                 </div>
             </div>
@@ -1051,13 +1055,36 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     };
 
     const handleNodeUpdate = (updates: Partial<MapNodeEntity>) => {
-        if (!activeInspectorNodeId) return;
-        const newNodes = nodesRef.current.map(n => n.id === activeInspectorNodeId ? { ...n, ...updates } : n);
-        setNodes(newNodes); 
-        nodesRef.current = newNodes;
-        pushToHistory(newNodes, edgesRef.current, 'EDIT_CONTENT'); 
-        const updated = newNodes.find(n => n.id === activeInspectorNodeId);
-        if (updated) DatabaseService.mapNodes.update(updated);
+        const nodeId = activeInspectorNodeId;
+        if (!nodeId) return;
+        
+        try {
+            const currentNodes = nodesRef.current;
+            const currentNode = currentNodes.find(n => n.id === nodeId);
+            if (!currentNode) return;
+
+            // Deep copy to avoid mutating references incorrectly
+            const updatedNode = { 
+                ...currentNode, 
+                ...updates, 
+                meta: { ...currentNode.meta, updatedAt: Date.now() } 
+            };
+
+            // 1. Database Priority: Save to persistent storage first
+            DatabaseService.mapNodes.update(updatedNode);
+
+            // 2. Local State Sync: Update UI
+            const newNodes = currentNodes.map(n => n.id === nodeId ? updatedNode : n);
+            setNodes(newNodes);
+            nodesRef.current = newNodes;
+
+            // 3. Record in Undo/Redo history
+            pushToHistory(newNodes, edgesRef.current, 'EDIT_CONTENT');
+            
+            console.log("[Map] Successfully saved node:", nodeId);
+        } catch (e) {
+            console.error("Critical: Failed to update node in DB/State", e);
+        }
     };
 
     const deleteEdge = async (edgeId: string) => {
