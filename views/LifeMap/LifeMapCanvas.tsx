@@ -429,7 +429,7 @@ const LibraryPanel: React.FC<{
                     {activeTab === 'GOALS' && ( <div className="space-y-1">{goals.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Все цели уже на карте.</div> : goals.map(goal => (<div key={goal.id} onClick={() => { onPickGoal(goal); onClose(); }} className="p-3 border-b border-slate-50 dark:border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><Target size={18} className="text-indigo-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{goal.title}</div><div className="text-[10px] text-slate-400 mt-0.5">{goal.progress}% завершено</div></div></div>))}</div>)}
                     {activeTab === 'TASKS' && ( <div className="space-y-1">{tasks.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Нет свободных активных задач.</div> : tasks.map(task => (<div key={task.id} onClick={() => { onPickTask(task); onClose(); }} className="p-3 border-b border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><CheckSquare size={18} className="text-blue-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{task.title}</div><div className={`text-[10px] uppercase font-bold mt-0.5 ${getPriorityColor(task.priority)}`}>{task.priority}</div></div></div>))}</div>)}
                     {activeTab === 'HABITS' && ( <div className="space-y-1">{habits.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Все привычки на карте.</div> : habits.map(habit => (<div key={habit.id} onClick={() => { onPickHabit(habit); onClose(); }} className="p-3 border-b border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><Activity size={18} className="text-orange-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{habit.title}</div><div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1"><Flame size={10} className="text-orange-500" /> {habit.streak} дней</div></div></div>))}</div>)}
-                    {activeTab === 'SPHERES' && ( <div className="space-y-1">{trackers.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Все планы по сферам уже на карте.</div> : trackers.map(t => (<div key={t.id} onClick={() => { onPickTracker(t); onClose(); }} className="p-3 border-b border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><Grid size={18} className="text-emerald-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{t.title}</div><div className="text-[10px] text-slate-400 mt-0.5">Цель: {t.targetCount}</div></div></div>))}</div>)}
+                    {activeTab === 'SPHERES' && ( <div className="space-y-1">{trackers.length === 0 ? <div className="p-6 text-center text-xs text-slate-400 italic">Все планы по сферам уже на карте.</div> : trackers.map(t => (<div key={t.id} onClick={() => { onPickTracker(t); onClose(); }} className="p-3 border-b border-slate-50 dark:border-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors rounded-xl flex items-center gap-3"><Grid size={18} className="text-emerald-500 shrink-0" /><div className="min-w-0"><div className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{t.title}</div><div className="text-[10px] text-slate-400 mt-0.5">Цель: {t.targetCount}</div></div></div>))}</div>)}
                 </div>
             </div>
         </>
@@ -473,6 +473,9 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     const edgesRef = useRef<MapEdgeEntity[]>([]);
     const viewportRef = useRef(viewport);
     const selectedNodeIdsRef = useRef<Set<string>>(new Set());
+    const mapIdRef = useRef<string | null>(null);
+    const editingNodeIdRef = useRef<string | null>(null);
+    const editTextRef = useRef('');
 
     // Persistence Helpers
     const saveViewportToDb = (v: typeof viewport) => {
@@ -491,6 +494,28 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     useEffect(() => { edgesRef.current = edges; }, [edges]);
     useEffect(() => { viewportRef.current = viewport; }, [viewport]);
     useEffect(() => { selectedNodeIdsRef.current = selectedNodeIds; }, [selectedNodeIds]);
+    useEffect(() => { mapIdRef.current = mapId; }, [mapId]);
+    useEffect(() => { 
+        editingNodeIdRef.current = editingNodeId;
+        editTextRef.current = editText;
+    }, [editingNodeId, editText]);
+
+    // Emergency persistence on unmount
+    useEffect(() => {
+        return () => {
+            if (editingNodeIdRef.current && mapIdRef.current) {
+                const nodeId = editingNodeIdRef.current;
+                const text = editTextRef.current;
+                const dbNodes = DatabaseService.mapNodes.getByMapId(mapIdRef.current);
+                const node = dbNodes.find(n => n.id === nodeId);
+                if (node && node.content.label !== text) {
+                    node.content.label = text;
+                    DatabaseService.mapNodes.update(node);
+                    console.log("[Map] Unmount persistence: Text saved");
+                }
+            }
+        };
+    }, []);
 
     const initialPinchDist = useRef<number | null>(null);
     const initialPinchViewport = useRef<any>(null);
@@ -521,9 +546,11 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
     }, [userId]);
 
     const loadData = async (mid: string) => {
-        await UseCases.recalculateMapProgress.execute(mid, userId);
+        // 1. First, load existing data from DB
         const loadedNodes = DatabaseService.mapNodes.getByMapId(mid);
         const loadedEdges = DatabaseService.mapEdges.getByMapId(mid);
+        
+        // 2. Set state immediately so UI is responsive
         setNodes(loadedNodes);
         setEdges(loadedEdges);
         syncRefs(loadedNodes, loadedEdges);
@@ -533,6 +560,18 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
             historyManagerRef.current.push(loadedNodes, loadedEdges, 'INIT');
         }
         updateHistoryState();
+
+        // 3. Background recalculation: calculate progress based on fresh data
+        try {
+            const res = await UseCases.recalculateMapProgress.execute(mid, userId);
+            if (res.success) {
+                // Update state only with calculated progress data
+                setNodes(res.data);
+                nodesRef.current = res.data;
+            }
+        } catch (err) {
+            console.error("[Map] Recalculation error", err);
+        }
     };
 
     useEffect(() => {
@@ -875,6 +914,9 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
                         pushToHistory(nodesRef.current, newEdges, 'CONNECT'); 
                         const edgeToUpdate = newEdges.find(e => e.id === reconnectingEdgeId);
                         if (edgeToUpdate) DatabaseService.mapEdges.update(edgeToUpdate);
+                        
+                        // Recalculate as structure changed
+                        if (mapId) UseCases.recalculateMapProgress.execute(mapId, userId).then(res => { if(res.success) setNodes(res.data); nodesRef.current = res.data; });
                     }
                 }
             }
@@ -890,15 +932,22 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         }
     };
 
-    const handleCreateEdge = (type: MapEdgeType) => {
+    const handleCreateEdge = async (type: MapEdgeType) => {
         if (!edgeDraftMenu) return;
         const newEdge: MapEdgeEntity = { id: uuid(), mapId: mapId!, sourceNodeId: edgeDraftMenu.sourceId, targetNodeId: edgeDraftMenu.targetId, relationType: type, meta: createMeta() };
         const newEdges = [...edgesRef.current, newEdge];
+        
+        DatabaseService.mapEdges.insert(newEdge); 
         setEdges(newEdges); 
         edgesRef.current = newEdges;
         pushToHistory(nodesRef.current, newEdges, 'CONNECT'); 
-        DatabaseService.mapEdges.insert(newEdge); 
         setEdgeDraftMenu(null);
+        
+        // Recalculate impact of new connection
+        if (mapId) {
+            const res = await UseCases.recalculateMapProgress.execute(mapId, userId);
+            if (res.success) { setNodes(res.data); nodesRef.current = res.data; }
+        }
     };
 
     const handleEdgeClick = (e: React.MouseEvent, edgeId: string) => { 
@@ -1011,17 +1060,23 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         if (updated) DatabaseService.mapNodes.update(updated);
     };
 
-    const deleteEdge = (edgeId: string) => {
+    const deleteEdge = async (edgeId: string) => {
         const newEdges = edgesRef.current.filter(e => e.id !== edgeId);
         setEdges(newEdges); 
         edgesRef.current = newEdges;
         if (selectedEdgeId === edgeId) setSelectedEdgeId(null);
         pushToHistory(nodesRef.current, newEdges, 'DISCONNECT'); 
         DatabaseService.mapEdges.delete(edgeId);
+        
+        // Recalculate impact
+        if (mapId) {
+            const res = await UseCases.recalculateMapProgress.execute(mapId, userId);
+            if (res.success) { setNodes(res.data); nodesRef.current = res.data; }
+        }
     };
 
-    const handleDelete = () => {
-        if (selectedEdgeId) { deleteEdge(selectedEdgeId); return; }
+    const handleDelete = async () => {
+        if (selectedEdgeId) { await deleteEdge(selectedEdgeId); return; }
         const currentSelection = selectedNodeIdsRef.current;
         if (currentSelection.size === 0) return;
         const toDelete = Array.from(currentSelection).filter(id => { const node = nodesRef.current.find(n => n.id === id); return node && node.type !== MapNodeType.CURRENT_SELF && node.type !== MapNodeType.FUTURE_SELF; });
@@ -1040,6 +1095,12 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
         toDelete.forEach(id => DatabaseService.mapNodes.delete(id));
         deletedEdges.forEach(e => DatabaseService.mapEdges.delete(e.id));
         refreshUnmappedData(newNodes);
+        
+        // Recalculate
+        if (mapId) {
+            const res = await UseCases.recalculateMapProgress.execute(mapId, userId);
+            if (res.success) { setNodes(res.data); nodesRef.current = res.data; }
+        }
     };
 
     const focusNode = (id?: string) => {
@@ -1111,7 +1172,7 @@ export const LifeMapCanvas: React.FC<Props> = ({ userId, onNavigate, focusGoalId
             <div className="absolute top-20 md:top-4 left-4 z-20 flex flex-col gap-2">
                 <div className="bg-white dark:bg-slate-900 p-1.5 md:p-2 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col gap-1.5 md:gap-2">
                     <button onClick={() => { if (containerRef.current) { const worldPos = screenToWorld(containerRef.current.clientWidth / 2, containerRef.current.clientHeight / 2, viewportRef.current); const newNode: MapNodeEntity = { id: uuid(), mapId: mapId!, type: MapNodeType.NOTE, position: worldPos, content: { label: "Заметка" }, references: {}, meta: createMeta() }; const newNodes = [...nodesRef.current, newNode]; setNodes(newNodes); nodesRef.current = newNodes; pushToHistory(newNodes, edgesRef.current, 'ADD_NODE'); DatabaseService.mapNodes.insert(newNode); } }} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Добавить заметку"><Brain size={18} className="md:w-5 md:h-5" /></button>
-                    <button onClick={() => hiddenFileInputRef.current?.click()} className="p-2 text-slate-500 hover:text-purple-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Добавить образ (фото)"><ImageIcon size={18} className="md:w-5 md:h-5" /></button>
+                    <button onClick={() => { if(hiddenFileInputRef.current) hiddenFileInputRef.current.click(); }} className="p-2 text-slate-500 hover:text-purple-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Добавить образ (фото)"><ImageIcon size={18} className="md:w-5 md:h-5" /></button>
                     <input type="file" ref={hiddenFileInputRef} className="hidden" accept="image/*" onChange={handleAddImage} />
                     <div className="h-px bg-slate-200 dark:bg-slate-700 my-0.5 md:my-1"></div>
                     <button onClick={undo} disabled={!canUndo} className="p-2 text-slate-500 hover:text-slate-900 disabled:opacity-30"><Undo size={18} className="md:w-5 md:h-5" /></button>
