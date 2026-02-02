@@ -379,7 +379,7 @@ export interface MapNodeEntity {
     content: {
         label: string;
         description?: string;
-        imageUrl?: string; // Поле для хранения картинки
+        imageUrl?: string;
         currentSelfData?: CurrentSelfData;
         futureSelfData?: FutureSelfData;
     };
@@ -388,6 +388,7 @@ export interface MapNodeEntity {
         taskId?: string;
         habitId?: string;
         sphereTrackerId?: string;
+        stageId?: string;
     };
     progressData?: MapNodeProgress;
     meta: SyncMeta;
